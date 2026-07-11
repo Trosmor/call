@@ -2,7 +2,12 @@ name: Garmin sync
 
 on:
   schedule:
-    - cron: "0 6 * * *" # daily at 06:00 UTC
+    # Every 2 hours (UTC), timezone-agnostic. Fills in "today's" active calories through
+    # the day so a workout shows up in the budget within ~2h (plus watch->Garmin lag),
+    # instead of only appearing the next morning. The commit step is a no-op when nothing
+    # changed, and GitHub Actions is free/unlimited on public repos. Scheduled runs can be
+    # delayed or occasionally skipped by GitHub under load — that's fine for this use.
+    - cron: "0 */2 * * *"
   workflow_dispatch: {} # lets you trigger it manually from the Actions tab
 
 permissions:
