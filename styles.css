@@ -198,12 +198,16 @@ html, body {
   width: 20px; text-align: center; border: none; background: none; color: var(--muted); font-size: 13px;
 }
 
-.add-food-row { display: flex; gap: 16px; padding-top: 12px; }
+.add-food-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding-top: 12px; }
 .btn-search {
   background: var(--black); color: var(--bg);
   border: none; border-radius: 18px; padding: 8px 18px; font-weight: 600;
 }
 .btn-create { background: none; border: none; color: var(--text); font-weight: 600; }
+.btn-repeat-meal {
+  background: none; border: none; color: var(--muted); font-size: 12px; font-weight: 600;
+  margin-left: auto; white-space: nowrap;
+}
 
 .row-card { display: flex; align-items: center; gap: 12px; }
 .row-card.static { opacity: 0.85; }

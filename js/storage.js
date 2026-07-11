@@ -170,6 +170,27 @@ export const Storage = {
     return copiedCount;
   },
 
+  /** Copies just one meal type from one day into another, e.g. "repeat yesterday's breakfast". */
+  copyMealType(fromDate, toDate, mealType) {
+    const root = loadRoot();
+    const fromKey = dateKey(fromDate);
+    const toKey = dateKey(toDate);
+    const fromDay = root.days[fromKey];
+    if (!fromDay || !fromDay.meals[mealType].length) return 0;
+    if (!root.days[toKey]) root.days[toKey] = emptyDay(toKey, root.profile);
+    const toDay = root.days[toKey];
+
+    for (const item of fromDay.meals[mealType]) {
+      toDay.meals[mealType].push({
+        ...item,
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString()
+      });
+    }
+    saveRoot(root);
+    return fromDay.meals[mealType].length;
+  },
+
   addWater(date, ml) {
     const root = loadRoot();
     const key = dateKey(date);

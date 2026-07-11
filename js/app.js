@@ -186,6 +186,22 @@ function renderMeals(day) {
       openCreateDialog(btn.dataset.createMeal);
     };
   });
+
+  container.querySelectorAll("[data-repeat-meal]").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const mealType = btn.dataset.repeatMeal;
+      const yesterday = new Date(state.selectedDate);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const copied = Storage.copyMealType(yesterday, state.selectedDate, mealType);
+      if (!copied) {
+        setLoggingFeedback(`Вчера ${MEAL_META[mealType].label.toLowerCase()} не логировался.`, "error");
+        return;
+      }
+      setLoggingFeedback(`Скопировано ${copied} продукт(ов) в ${MEAL_META[mealType].label}.`, "success");
+      renderAll();
+    };
+  });
 }
 
 function mealCardHTML(day, type) {
@@ -226,6 +242,7 @@ function mealCardHTML(day, type) {
         <div class="add-food-row">
           <button class="btn-search" data-search-meal="${type}">Search</button>
           <button class="btn-create" data-create-meal="${type}">Create</button>
+          <button class="btn-repeat-meal" data-repeat-meal="${type}">↻ Repeat yesterday's ${meta.label.toLowerCase()}</button>
         </div>
       </div>
     </div>`;
