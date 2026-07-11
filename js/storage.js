@@ -77,6 +77,25 @@ export const Storage = {
   saveProfile(partial) {
     const root = loadRoot();
     root.profile = { ...root.profile, ...partial };
+
+    // Day logs snapshot the goals when first created, so a goal change would otherwise
+    // never reach a day that's already open. Propagate to today and to any day that has
+    // no food logged yet; past days with food keep their historical goals.
+    const goalFields = ["dailyCalorieGoal", "proteinGoalG", "fatGoalG", "carbGoalG", "waterGoalMl"];
+    if (goalFields.some((f) => f in partial)) {
+      const todayKey = dateKey(new Date());
+      for (const [key, day] of Object.entries(root.days)) {
+        const hasFood = MEAL_TYPES.some((t) => day.meals[t].length > 0);
+        if (key === todayKey || key > todayKey || !hasFood) {
+          day.calorieGoal = root.profile.dailyCalorieGoal;
+          day.proteinGoalG = root.profile.proteinGoalG;
+          day.fatGoalG = root.profile.fatGoalG;
+          day.carbGoalG = root.profile.carbGoalG;
+          day.waterGoalMl = root.profile.waterGoalMl;
+        }
+      }
+    }
+
     saveRoot(root);
     return root.profile;
   },
@@ -290,7 +309,10 @@ export const Storage = {
       d.setDate(d.getDate() - i);
       const key = dateKey(d);
       const day = root.days[key];
-      if (day) days.push(day);
+      // Merely browsing a date creates an empty day (fetch-or-create), and those
+      // empties would drag every average down — only count days with actual logs.
+      const hasAnyLog = day && (MEAL_TYPES.some((t) => day.meals[t].length > 0) || day.waterLoggedMl > 0);
+      if (hasAnyLog) days.push(day);
     }
     if (days.length === 0) {
       return { daysLogged: 0, avgKcal: 0, avgProtein: 0, avgFat: 0, avgCarb: 0, avgWaterMl: 0, onTargetPct: 0 };
@@ -326,7 +348,9 @@ export const Storage = {
       d.setDate(d.getDate() - i);
       const key = dateKey(d);
       const day = root.days[key];
-      if (!day) continue;
+      // Skip days with nothing logged — an auto-created empty day would read as
+      // "ate nothing that day" to the model and skew the analysis.
+      if (!day || !MEAL_TYPES.some((t) => day.meals[t].length > 0)) continue;
       const t = this.totals(day);
       const items = [];
       for (const mealType of MEAL_TYPES) {

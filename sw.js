@@ -1,5 +1,10 @@
-// Minimal offline shell cache — personal app, no need for anything fancier.
-const CACHE_NAME = "colorize-shell-v6";
+// Offline shell cache with a NETWORK-FIRST strategy.
+// Cache-first (the previous approach) meant an installed PWA kept serving the old
+// version until iOS decided to re-check sw.js — updates appeared to never arrive.
+// Network-first serves the freshest files whenever online and only falls back to
+// the cache when the network is unreachable, which is the right trade-off for a
+// personal app that is usually online.
+const CACHE_NAME = "colorize-shell-v7";
 const SHELL_FILES = [
   "./",
   "./index.html",
@@ -27,10 +32,20 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  // Never cache API calls — always hit the network for Claude.
+  // Never touch API calls — always hit the network for Claude.
   if (event.request.url.includes("api.anthropic.com")) return;
+  if (event.request.method !== "GET") return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((response) => {
+        // Keep the cache fresh so the offline fallback is as recent as possible.
+        if (response.ok && new URL(event.request.url).origin === self.location.origin) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

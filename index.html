@@ -176,11 +176,14 @@
         <section class="card form-card">
           <h2>Backup</h2>
           <p class="hint">Все данные хранятся только в этом браузере. Скачивай бэкап регулярно — иначе очистка кэша Safari или смена телефона сотрёт весь дневник.</p>
+          <p class="hint">Бэкап включает твой Claude API-ключ — храни файл в надёжном месте и не пересылай его.</p>
           <button id="btn-export-backup" class="primary-btn">Download backup</button>
           <input id="import-backup-input" type="file" accept="application/json" hidden />
           <button id="btn-import-backup" class="primary-btn secondary">Restore from file</button>
           <p id="backup-status" class="hint"></p>
         </section>
+
+        <p id="app-version" class="hint version-line"></p>
       </main>
     </section>
 

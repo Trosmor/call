@@ -3,6 +3,9 @@ import { ClaudeClient, ClaudeAPIError } from "./claude.js";
 import { computeGoals, ACTIVITY_LABELS, GOAL_LABELS } from "./calc.js";
 import { Garmin } from "./garmin.js";
 
+// Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
+const APP_VERSION = "2026-07-11.2";
+
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "☀️" },
   lunch: { label: "Lunch", icon: "🍴" },
@@ -827,6 +830,7 @@ if ("serviceWorker" in navigator) {
 
 // ---------- init ----------
 
+el("app-version").textContent = `Colorize ${APP_VERSION}`;
 renderAll();
 
 Garmin.preload().then(() => {
