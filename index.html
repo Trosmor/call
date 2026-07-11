@@ -24,6 +24,8 @@
       <main class="content">
         <nav id="week-selector" class="week-selector"></nav>
 
+        <button id="btn-repeat-yesterday" class="repeat-btn">↻ Repeat yesterday</button>
+
         <section class="card calorie-card">
           <div class="calorie-row">
             <div>
@@ -165,6 +167,15 @@
           <p id="api-key-status" class="hint"></p>
           <p class="hint">Ключ хранится только в localStorage этого браузера на этом устройстве, никуда не отправляется, кроме api.anthropic.com.</p>
         </section>
+
+        <section class="card form-card">
+          <h2>Backup</h2>
+          <p class="hint">Все данные хранятся только в этом браузере. Скачивай бэкап регулярно — иначе очистка кэша Safari или смена телефона сотрёт весь дневник.</p>
+          <button id="btn-export-backup" class="primary-btn">Download backup</button>
+          <input id="import-backup-input" type="file" accept="application/json" hidden />
+          <button id="btn-import-backup" class="primary-btn secondary">Restore from file</button>
+          <p id="backup-status" class="hint"></p>
+        </section>
       </main>
     </section>
 
@@ -182,6 +193,10 @@
             <input id="measurement-weight" type="number" step="0.1" placeholder="kg" required />
             <button type="submit" class="primary-btn">Log</button>
           </form>
+        </section>
+        <section id="weight-chart-card" class="card hidden">
+          <h2>Trend</h2>
+          <div id="weight-chart"></div>
         </section>
         <section class="card">
           <h2>History</h2>
@@ -223,10 +238,10 @@
       <ul id="search-results" class="search-results"></ul>
     </dialog>
 
-    <!-- Manual create sheet -->
+    <!-- Manual create / edit sheet -->
     <dialog id="create-dialog">
       <div class="sheet-header">
-        <h2>Create</h2>
+        <h2 id="create-dialog-title">Create</h2>
         <button id="btn-close-create" class="icon-btn">✕</button>
       </div>
       <form id="create-form">
@@ -236,7 +251,7 @@
         <label>Protein (g) <input id="create-protein" type="number" step="1" /></label>
         <label>Fat (g) <input id="create-fat" type="number" step="1" /></label>
         <label>Carbs (g) <input id="create-carb" type="number" step="1" /></label>
-        <button type="submit" class="primary-btn">Add</button>
+        <button type="submit" id="create-submit-btn" class="primary-btn">Add</button>
       </form>
     </dialog>
 

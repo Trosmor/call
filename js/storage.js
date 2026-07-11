@@ -123,6 +123,48 @@ export const Storage = {
     saveRoot(root);
   },
 
+  editFoodItem(date, mealType, itemId, updates) {
+    const root = loadRoot();
+    const key = dateKey(date);
+    const day = root.days[key];
+    if (!day) return;
+    const item = day.meals[mealType].find((i) => i.id === itemId);
+    if (!item) return;
+    item.name = updates.name;
+    item.grams = updates.grams;
+    item.kcal = Math.round(updates.kcal);
+    item.proteinG = updates.proteinG;
+    item.fatG = updates.fatG;
+    item.carbG = updates.carbG;
+    saveRoot(root);
+  },
+
+  /** Copies every meal item from one day into another, e.g. "repeat yesterday". */
+  copyMeals(fromDate, toDate) {
+    const root = loadRoot();
+    const fromKey = dateKey(fromDate);
+    const toKey = dateKey(toDate);
+    const fromDay = root.days[fromKey];
+    if (!fromDay) return null;
+    if (!root.days[toKey]) root.days[toKey] = emptyDay(toKey, root.profile);
+    const toDay = root.days[toKey];
+
+    let copiedCount = 0;
+    for (const mealType of MEAL_TYPES) {
+      for (const item of fromDay.meals[mealType]) {
+        toDay.meals[mealType].push({
+          ...item,
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString()
+        });
+        copiedCount++;
+      }
+    }
+    toDay.waterLoggedMl += fromDay.waterLoggedMl;
+    saveRoot(root);
+    return copiedCount;
+  },
+
   addWater(date, ml) {
     const root = loadRoot();
     const key = dateKey(date);
@@ -269,6 +311,30 @@ export const Storage = {
     root.lastReport = { text, generatedAt: new Date().toISOString() };
     saveRoot(root);
     return root.lastReport;
+  },
+
+  // ---------- backup ----------
+
+  /** Full JSON dump of everything in localStorage — the only copy of the data that exists. */
+  exportBackup() {
+    const root = loadRoot();
+    return JSON.stringify({ ...root, exportedAt: new Date().toISOString(), version: 1 }, null, 2);
+  },
+
+  /** Overwrites all local data. Caller is responsible for confirming with the user first. */
+  importBackup(jsonString) {
+    const parsed = JSON.parse(jsonString);
+    if (!parsed || typeof parsed !== "object" || !parsed.profile || !parsed.days) {
+      throw new Error("Файл не похож на бэкап Colorize.");
+    }
+    const root = {
+      profile: { ...DEFAULT_PROFILE, ...parsed.profile },
+      days: parsed.days || {},
+      measurements: parsed.measurements || [],
+      lastReport: parsed.lastReport || null
+    };
+    saveRoot(root);
+    return root;
   },
 
   dateKey,

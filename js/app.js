@@ -13,7 +13,8 @@ const state = {
   selectedDate: new Date(),
   weekAnchor: new Date(),
   openMeals: new Set(["breakfast"]),
-  activeMealTypeForDialog: "breakfast"
+  activeMealTypeForDialog: "breakfast",
+  editingItemId: null // non-null while create-dialog is repurposed for editing an existing item
 };
 
 const el = (id) => document.getElementById(id);
@@ -137,6 +138,14 @@ function renderMeals(day) {
     };
   });
 
+  container.querySelectorAll("[data-edit-item]").forEach((node) => {
+    node.onclick = (e) => {
+      e.stopPropagation();
+      const { mealType, itemId } = node.dataset;
+      openEditDialog(day, mealType, itemId);
+    };
+  });
+
   container.querySelectorAll("[data-search-meal]").forEach((btn) => {
     btn.onclick = (e) => {
       e.stopPropagation();
@@ -161,7 +170,7 @@ function mealCardHTML(day, type) {
     .map(
       (item) => `
     <div class="food-item-row">
-      <div class="food-item-name">${escapeHtml(item.name)}<span class="food-item-macros">${Math.round(item.proteinG)}p · ${Math.round(item.fatG)}f · ${Math.round(item.carbG)}c</span></div>
+      <div class="food-item-name" data-edit-item data-meal-type="${type}" data-item-id="${item.id}">${escapeHtml(item.name)}<span class="food-item-macros">${Math.round(item.proteinG)}p · ${Math.round(item.fatG)}f · ${Math.round(item.carbG)}c</span></div>
       <div class="food-item-grams">${Math.round(item.grams)}</div>
       <div class="food-item-kcal">${item.kcal}</div>
       <button class="food-item-delete" data-delete-item data-meal-type="${type}" data-item-id="${item.id}">✕</button>
@@ -264,7 +273,26 @@ el("btn-close-search").onclick = () => el("search-dialog").close();
 
 function openCreateDialog(mealType) {
   state.activeMealTypeForDialog = mealType;
+  state.editingItemId = null;
   el("create-form").reset();
+  el("create-dialog-title").textContent = "Create";
+  el("create-submit-btn").textContent = "Add";
+  el("create-dialog").showModal();
+}
+
+function openEditDialog(day, mealType, itemId) {
+  const item = day.meals[mealType].find((i) => i.id === itemId);
+  if (!item) return;
+  state.activeMealTypeForDialog = mealType;
+  state.editingItemId = itemId;
+  el("create-name").value = item.name;
+  el("create-grams").value = item.grams;
+  el("create-kcal").value = item.kcal;
+  el("create-protein").value = item.proteinG;
+  el("create-fat").value = item.fatG;
+  el("create-carb").value = item.carbG;
+  el("create-dialog-title").textContent = "Edit";
+  el("create-submit-btn").textContent = "Save";
   el("create-dialog").showModal();
 }
 
@@ -272,18 +300,41 @@ el("btn-close-create").onclick = () => el("create-dialog").close();
 
 el("create-form").addEventListener("submit", (e) => {
   e.preventDefault();
-  Storage.addFoodItem(state.selectedDate, state.activeMealTypeForDialog, {
+  const values = {
     name: el("create-name").value,
     grams: parseFloat(el("create-grams").value) || 0,
     kcal: parseInt(el("create-kcal").value, 10) || 0,
     proteinG: parseFloat(el("create-protein").value) || 0,
     fatG: parseFloat(el("create-fat").value) || 0,
-    carbG: parseFloat(el("create-carb").value) || 0,
-    source: "manual"
-  });
+    carbG: parseFloat(el("create-carb").value) || 0
+  };
+  if (state.editingItemId) {
+    Storage.editFoodItem(state.selectedDate, state.activeMealTypeForDialog, state.editingItemId, values);
+  } else {
+    Storage.addFoodItem(state.selectedDate, state.activeMealTypeForDialog, { ...values, source: "manual" });
+  }
+  state.editingItemId = null;
   el("create-dialog").close();
   renderAll();
 });
+
+// ---------- repeat yesterday ----------
+
+el("btn-repeat-yesterday").onclick = () => {
+  const yesterday = new Date(state.selectedDate);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const copied = Storage.copyMeals(yesterday, state.selectedDate);
+  if (copied === null) {
+    setLoggingFeedback("Вчера ничего не залогировано.", "error");
+    return;
+  }
+  if (copied === 0) {
+    setLoggingFeedback("Вчера приёмов пищи не было.", "error");
+    return;
+  }
+  setLoggingFeedback(`Скопировано ${copied} продукт(ов) со вчера.`, "success");
+  renderAll();
+};
 
 // ---------- water ----------
 
@@ -413,6 +464,46 @@ el("btn-save-key").onclick = () => {
   el("api-key-status").textContent = "Saved.";
 };
 
+// ---------- backup ----------
+
+el("btn-export-backup").onclick = () => {
+  const json = Storage.exportBackup();
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `colorize-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  el("backup-status").textContent = "Backup downloaded.";
+};
+
+el("btn-import-backup").onclick = () => el("import-backup-input").click();
+
+el("import-backup-input").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+
+  const confirmed = window.confirm(
+    "Это ПОЛНОСТЬЮ заменит текущие данные в приложении содержимым файла. Продолжить?"
+  );
+  if (!confirmed) return;
+
+  try {
+    const text = await file.text();
+    Storage.importBackup(text);
+    el("backup-status").textContent = "Restored from backup.";
+    loadSettingsForm();
+    renderAll();
+  } catch (err) {
+    el("backup-status").textContent = `Ошибка восстановления: ${err.message}`;
+  }
+});
+
 // ---------- logging: text / photo -> Claude ----------
 
 function setLoggingBusy(busy) {
@@ -517,7 +608,39 @@ function resizeImageToBase64(file, maxDimension = 1024, quality = 0.7) {
 
 // ---------- measurements ----------
 
+function renderWeightChart() {
+  const points = Storage.allMeasurements(); // already sorted ascending by date
+  const card = el("weight-chart-card");
+  if (points.length < 2) {
+    card.classList.add("hidden");
+    return;
+  }
+  card.classList.remove("hidden");
+
+  const width = 320, height = 120, padX = 24, padY = 16;
+  const weights = points.map((p) => p.weightKg);
+  const minW = Math.min(...weights), maxW = Math.max(...weights);
+  const range = maxW - minW || 1;
+
+  const xFor = (i) => padX + (i / (points.length - 1)) * (width - padX * 2);
+  const yFor = (w) => padY + (1 - (w - minW) / range) * (height - padY * 2);
+
+  const linePoints = points.map((p, i) => `${xFor(i)},${yFor(p.weightKg)}`).join(" ");
+  const dots = points
+    .map((p, i) => `<circle class="chart-dot" cx="${xFor(i)}" cy="${yFor(p.weightKg)}" r="3"></circle>`)
+    .join("");
+
+  el("weight-chart").innerHTML = `
+    <svg class="weight-chart" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+      <text class="chart-label" x="${padX}" y="10">${maxW.toFixed(1)}</text>
+      <text class="chart-label" x="${padX}" y="${height - 4}">${minW.toFixed(1)}</text>
+      <polyline class="chart-line" points="${linePoints}"></polyline>
+      ${dots}
+    </svg>`;
+}
+
 function renderMeasurements() {
+  renderWeightChart();
   const list = el("measurement-list");
   const measurements = [...Storage.allMeasurements()].reverse();
   list.innerHTML = measurements
