@@ -1,5 +1,6 @@
 import { Storage } from "./storage.js";
 import { ClaudeClient, ClaudeAPIError } from "./claude.js";
+import { computeGoals, ACTIVITY_LABELS, GOAL_LABELS } from "./calc.js";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "☀️" },
@@ -303,7 +304,33 @@ el("btn-back").onclick = () => {
   el("screen-today").classList.remove("hidden");
 };
 
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach((s) => s.classList.add("hidden"));
+  el(id).classList.remove("hidden");
+}
+
+document.querySelectorAll(".back-to-today").forEach((btn) => {
+  btn.onclick = () => showScreen("screen-today");
+});
+
+el("btn-open-measurements").onclick = () => {
+  renderMeasurements();
+  showScreen("screen-measurements");
+};
+
+el("btn-open-reports").onclick = () => {
+  renderReportsScreen();
+  showScreen("screen-reports");
+};
+
 // ---------- settings ----------
+
+function populateSelect(select, labels, current) {
+  select.innerHTML = Object.entries(labels)
+    .map(([value, label]) => `<option value="${value}">${label}</option>`)
+    .join("");
+  select.value = current;
+}
 
 function loadSettingsForm() {
   const profile = Storage.getProfile();
@@ -314,7 +341,51 @@ function loadSettingsForm() {
   el("goal-water").value = profile.waterGoalMl;
   document.querySelector(`input[name="model"][value="${profile.preferredModel}"]`).checked = true;
   el("api-key-status").textContent = profile.apiKey ? "Key is set." : "No key set yet.";
+
+  el("profile-age").value = profile.age ?? "";
+  el("profile-sex").value = profile.sex;
+  el("profile-height").value = profile.heightCm ?? "";
+  el("profile-weight").value = profile.weightKg ?? "";
+  populateSelect(el("profile-activity"), ACTIVITY_LABELS, profile.activityLevel);
+  populateSelect(el("profile-goal"), GOAL_LABELS, profile.goal);
+  el("profile-rate").value = profile.goalRateKgPerWeek ?? 0.5;
+  el("calc-goals-status").textContent = "";
 }
+
+const PROFILE_FIELD_IDS = ["profile-age", "profile-sex", "profile-height", "profile-weight", "profile-activity", "profile-goal", "profile-rate"];
+PROFILE_FIELD_IDS.forEach((id) => {
+  el(id).addEventListener("change", () => {
+    Storage.saveProfile({
+      age: parseInt(el("profile-age").value, 10) || null,
+      sex: el("profile-sex").value,
+      heightCm: parseFloat(el("profile-height").value) || null,
+      weightKg: parseFloat(el("profile-weight").value) || null,
+      activityLevel: el("profile-activity").value,
+      goal: el("profile-goal").value,
+      goalRateKgPerWeek: parseFloat(el("profile-rate").value) || 0
+    });
+  });
+});
+
+el("btn-calc-goals").onclick = () => {
+  const profile = Storage.getProfile();
+  if (!profile.age || !profile.heightCm || !profile.weightKg) {
+    el("calc-goals-status").textContent = "Fill in age, height and weight first.";
+    return;
+  }
+  const goals = computeGoals(profile);
+  Storage.saveProfile({
+    dailyCalorieGoal: goals.calorieGoal,
+    proteinGoalG: goals.proteinGoalG,
+    fatGoalG: goals.fatGoalG,
+    carbGoalG: goals.carbGoalG
+  });
+  el("goal-kcal").value = goals.calorieGoal;
+  el("goal-protein").value = goals.proteinGoalG;
+  el("goal-fat").value = goals.fatGoalG;
+  el("goal-carb").value = goals.carbGoalG;
+  el("calc-goals-status").textContent = `BMR ${goals.bmr} kcal · TDEE ${goals.tdee} kcal · Goal ${goals.calorieGoal} kcal`;
+};
 
 ["goal-kcal", "goal-protein", "goal-fat", "goal-carb", "goal-water"].forEach((id) => {
   el(id).addEventListener("change", () => {
@@ -443,6 +514,123 @@ function resizeImageToBase64(file, maxDimension = 1024, quality = 0.7) {
     reader.readAsDataURL(file);
   });
 }
+
+// ---------- measurements ----------
+
+function renderMeasurements() {
+  const list = el("measurement-list");
+  const measurements = [...Storage.allMeasurements()].reverse();
+  list.innerHTML = measurements
+    .map(
+      (m) => `<li>
+        <span>${new Date(m.date).toLocaleDateString()}</span>
+        <span>${m.weightKg.toFixed(1)} kg</span>
+        <button data-delete-measurement="${m.id}">✕</button>
+      </li>`
+    )
+    .join("") || `<li><span>No entries yet</span></li>`;
+
+  list.querySelectorAll("[data-delete-measurement]").forEach((btn) => {
+    btn.onclick = () => {
+      Storage.deleteMeasurement(btn.dataset.deleteMeasurement);
+      renderMeasurements();
+    };
+  });
+}
+
+el("measurement-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const input = el("measurement-weight");
+  const weight = parseFloat(input.value);
+  if (!weight) return;
+  Storage.addMeasurement(weight);
+  input.value = "";
+  renderMeasurements();
+});
+
+// ---------- reports ----------
+
+function renderReportsScreen() {
+  const stats = Storage.weeklyStats(state.selectedDate, 7);
+  const grid = el("weekly-stats");
+  const tiles = [
+    ["Avg calories", stats.daysLogged ? stats.avgKcal : "—"],
+    ["Days on target", `${stats.onTargetPct}%`],
+    ["Avg protein", `${stats.avgProtein}g`],
+    ["Avg fat", `${stats.avgFat}g`],
+    ["Avg carbs", `${stats.avgCarb}g`],
+    ["Avg water", `${stats.avgWaterMl}ml`]
+  ];
+  grid.innerHTML = tiles
+    .map(([label, value]) => `<div class="stat-tile"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`)
+    .join("");
+
+  const last = Storage.getLastReport();
+  if (last) {
+    el("report-card").classList.remove("hidden");
+    el("report-meta").textContent = `Last analyzed: ${new Date(last.generatedAt).toLocaleString()}`;
+    el("report-text").innerHTML = renderMarkdown(last.text);
+  } else {
+    el("report-card").classList.add("hidden");
+  }
+  el("analyze-status").textContent = "";
+}
+
+/** Tiny, dependency-free markdown -> HTML for the AI report (headers, bold, bullet lists, paragraphs). */
+function renderMarkdown(text) {
+  const escaped = escapeHtml(text);
+  const lines = escaped.split("\n");
+  let html = "";
+  let inList = false;
+  for (const line of lines) {
+    const heading = line.match(/^##+\s+(.*)/);
+    const bullet = line.match(/^[-*]\s+(.*)/);
+    if (heading) {
+      if (inList) { html += "</ul>"; inList = false; }
+      html += `<h2>${inlineMarkdown(heading[1])}</h2>`;
+    } else if (bullet) {
+      if (!inList) { html += "<ul>"; inList = true; }
+      html += `<li>${inlineMarkdown(bullet[1])}</li>`;
+    } else if (line.trim() === "") {
+      if (inList) { html += "</ul>"; inList = false; }
+    } else {
+      if (inList) { html += "</ul>"; inList = false; }
+      html += `<p>${inlineMarkdown(line)}</p>`;
+    }
+  }
+  if (inList) html += "</ul>";
+  return html;
+}
+
+function inlineMarkdown(str) {
+  return str.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
+
+el("btn-analyze").onclick = async () => {
+  const profile = Storage.getProfile();
+  if (!profile.apiKey) {
+    el("analyze-status").textContent = "Укажи Claude API-ключ в Настройках.";
+    return;
+  }
+  if (!profile.age || !profile.heightCm || !profile.weightKg) {
+    el("analyze-status").textContent = "Заполни профиль (возраст, рост, вес) в Настройках для точного анализа.";
+    return;
+  }
+  const btn = el("btn-analyze");
+  btn.disabled = true;
+  el("analyze-status").textContent = "Анализирую...";
+  try {
+    const model = ClaudeClient.modelIdFor(profile.preferredModel);
+    const recentDays = Storage.recentDaysForAnalysis(state.selectedDate, 7);
+    const text = await ClaudeClient.analyzeNutrition(profile.apiKey, model, profile, recentDays);
+    Storage.saveLastReport(text);
+    renderReportsScreen();
+  } catch (err) {
+    el("analyze-status").textContent = err instanceof ClaudeAPIError ? err.message : `Ошибка: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 // ---------- service worker ----------
 

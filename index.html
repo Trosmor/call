@@ -69,13 +69,23 @@
           <button id="btn-add-water" class="plus-btn">+</button>
         </section>
 
-        <section class="card row-card static">
+        <button id="btn-open-measurements" class="card row-card as-button">
           <div class="row-icon">📏</div>
           <div class="row-text">
             <div class="row-title">Measurements</div>
             <div class="row-sub">Track progress, not vibes</div>
           </div>
-        </section>
+          <div class="chevron">›</div>
+        </button>
+
+        <button id="btn-open-reports" class="card row-card as-button">
+          <div class="row-icon">📊</div>
+          <div class="row-text">
+            <div class="row-title">Reports</div>
+            <div class="row-sub">AI analysis & recommendations</div>
+          </div>
+          <div class="chevron">›</div>
+        </button>
 
         <section class="card row-card static">
           <div class="row-icon">🏋️</div>
@@ -110,6 +120,28 @@
       </header>
       <main class="content">
         <section class="card form-card">
+          <h2>Body profile</h2>
+          <label>Age <input id="profile-age" type="number" step="1" /></label>
+          <label>Sex
+            <select id="profile-sex">
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+            </select>
+          </label>
+          <label>Height (cm) <input id="profile-height" type="number" step="1" /></label>
+          <label>Weight (kg) <input id="profile-weight" type="number" step="0.1" /></label>
+          <label>Activity
+            <select id="profile-activity"></select>
+          </label>
+          <label>Goal
+            <select id="profile-goal"></select>
+          </label>
+          <label>Target rate (kg/week) <input id="profile-rate" type="number" step="0.1" min="0" /></label>
+          <button id="btn-calc-goals" class="primary-btn">Calculate goals from profile</button>
+          <p id="calc-goals-status" class="hint"></p>
+        </section>
+
+        <section class="card form-card">
           <h2>Daily goals</h2>
           <label>Calories <input id="goal-kcal" type="number" step="50" /></label>
           <label>Protein (g) <input id="goal-protein" type="number" step="5" /></label>
@@ -132,6 +164,51 @@
           <button id="btn-save-key" class="primary-btn">Save</button>
           <p id="api-key-status" class="hint"></p>
           <p class="hint">Ключ хранится только в localStorage этого браузера на этом устройстве, никуда не отправляется, кроме api.anthropic.com.</p>
+        </section>
+      </main>
+    </section>
+
+    <!-- Measurements screen -->
+    <section id="screen-measurements" class="screen hidden">
+      <header class="topbar">
+        <button class="icon-btn back-to-today" aria-label="Back">←</button>
+        <h1>Measurements</h1>
+        <span></span>
+      </header>
+      <main class="content">
+        <section class="card form-card">
+          <h2>Log weight</h2>
+          <form id="measurement-form" class="inline-form">
+            <input id="measurement-weight" type="number" step="0.1" placeholder="kg" required />
+            <button type="submit" class="primary-btn">Log</button>
+          </form>
+        </section>
+        <section class="card">
+          <h2>History</h2>
+          <ul id="measurement-list" class="plain-list"></ul>
+        </section>
+      </main>
+    </section>
+
+    <!-- Reports screen -->
+    <section id="screen-reports" class="screen hidden">
+      <header class="topbar">
+        <button class="icon-btn back-to-today" aria-label="Back">←</button>
+        <h1>Reports</h1>
+        <span></span>
+      </header>
+      <main class="content">
+        <section class="card">
+          <h2>Last 7 days</h2>
+          <div id="weekly-stats" class="stats-grid"></div>
+        </section>
+        <section class="card form-card">
+          <button id="btn-analyze" class="primary-btn">Analyze my nutrition</button>
+          <p id="analyze-status" class="hint"></p>
+        </section>
+        <section id="report-card" class="card hidden">
+          <div id="report-meta" class="hint"></div>
+          <div id="report-text" class="report-text"></div>
         </section>
       </main>
     </section>

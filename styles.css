@@ -196,6 +196,9 @@ html, body {
 
 .row-card { display: flex; align-items: center; gap: 12px; }
 .row-card.static { opacity: 0.85; }
+.row-card.as-button {
+  border: none; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
+}
 .row-icon {
   width: 40px; height: 40px; border-radius: 50%;
   background: var(--black); color: var(--bg);
@@ -256,18 +259,41 @@ html, body {
   display: flex; justify-content: space-between; align-items: center;
   padding: 8px 0; font-size: 14px; border-bottom: 1px solid rgba(128,128,128,0.1);
 }
-.form-card input[type="number"], .form-card input[type="password"], .form-card input[type="text"] {
+.form-card input[type="number"], .form-card input[type="password"], .form-card input[type="text"],
+.form-card select {
   border: none; background: rgba(128,128,128,0.12); border-radius: 10px;
-  padding: 8px 10px; font-size: 14px; color: var(--text); width: 110px; text-align: right;
+  padding: 8px 10px; font-size: 14px; color: var(--text); width: 130px; text-align: right;
 }
 #api-key-input { width: 100%; margin-bottom: 10px; text-align: left; }
 .primary-btn {
   background: var(--black); color: var(--bg); border: none;
   border-radius: 14px; padding: 10px 16px; font-weight: 600; width: 100%;
+  margin-top: 8px;
 }
 .hint { font-size: 12px; color: var(--muted); }
 .segmented { display: flex; flex-direction: column; gap: 8px; }
 .segmented label { display: flex; gap: 8px; justify-content: flex-start; border: none; padding: 6px 0; }
+
+.inline-form { display: flex; gap: 8px; }
+.inline-form input { flex: 1; border: none; background: rgba(128,128,128,0.12); border-radius: 10px; padding: 10px; font-size: 14px; color: var(--text); }
+.inline-form .primary-btn { width: auto; margin-top: 0; padding: 10px 20px; }
+
+.plain-list { list-style: none; margin: 0; padding: 0; }
+.plain-list li {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid rgba(128,128,128,0.1); font-size: 14px;
+}
+.plain-list button { border: none; background: none; color: var(--muted); font-size: 13px; }
+
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+.stat-tile { background: rgba(128,128,128,0.08); border-radius: 12px; padding: 10px; }
+.stat-tile .stat-value { font-size: 20px; font-weight: 700; }
+.stat-tile .stat-label { font-size: 11px; color: var(--muted); }
+
+.report-text { font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+.report-text h2 { font-size: 15px; margin: 14px 0 6px; }
+.report-text ul { padding-left: 18px; margin: 6px 0; }
+.report-text strong { font-weight: 700; }
 
 dialog {
   border: none; border-radius: 20px 20px 0 0; width: 100%; max-width: 480px;
