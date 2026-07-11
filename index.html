@@ -190,7 +190,7 @@
         <section class="card form-card">
           <h2>Log weight</h2>
           <form id="measurement-form" class="inline-form">
-            <input id="measurement-weight" type="number" step="0.1" placeholder="kg" required />
+            <input id="measurement-weight" type="number" step="any" placeholder="kg" required />
             <button type="submit" class="primary-btn">Log</button>
           </form>
         </section>
@@ -246,11 +246,11 @@
       </div>
       <form id="create-form">
         <label>Name <input id="create-name" type="text" required /></label>
-        <label>Grams <input id="create-grams" type="number" step="1" /></label>
+        <label>Grams <input id="create-grams" type="number" step="any" /></label>
         <label>Kcal <input id="create-kcal" type="number" step="1" required /></label>
-        <label>Protein (g) <input id="create-protein" type="number" step="1" /></label>
-        <label>Fat (g) <input id="create-fat" type="number" step="1" /></label>
-        <label>Carbs (g) <input id="create-carb" type="number" step="1" /></label>
+        <label>Protein (g) <input id="create-protein" type="number" step="any" /></label>
+        <label>Fat (g) <input id="create-fat" type="number" step="any" /></label>
+        <label>Carbs (g) <input id="create-carb" type="number" step="any" /></label>
         <button type="submit" id="create-submit-btn" class="primary-btn">Add</button>
       </form>
     </dialog>
