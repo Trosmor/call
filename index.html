@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Colorize</title>
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#faf7f2" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Today screen -->
+    <section id="screen-today" class="screen">
+      <header class="topbar">
+        <h1>Colorize</h1>
+        <button id="btn-settings" class="icon-btn" aria-label="Settings">⚙️</button>
+      </header>
+
+      <main class="content">
+        <nav id="week-selector" class="week-selector"></nav>
+
+        <section class="card calorie-card">
+          <div class="calorie-row">
+            <div>
+              <div id="eaten-value" class="big-num">0</div>
+              <div class="label">EATEN</div>
+            </div>
+            <div class="right">
+              <div id="left-value" class="big-num">0</div>
+              <div class="label">LEFT</div>
+            </div>
+          </div>
+          <div class="progress-track"><div id="calorie-progress" class="progress-fill orange"></div></div>
+          <div id="calorie-goal-label" class="goal-label">0 kcal</div>
+        </section>
+
+        <section class="macro-row">
+          <div class="macro-tile">
+            <div class="macro-label">PROT</div>
+            <div class="macro-value"><span id="protein-value">0</span><span class="goal">/0</span></div>
+            <div class="progress-track small"><div id="protein-progress" class="progress-fill blue"></div></div>
+          </div>
+          <div class="macro-tile">
+            <div class="macro-label">FAT</div>
+            <div class="macro-value"><span id="fat-value">0</span><span class="goal">/0</span></div>
+            <div class="progress-track small"><div id="fat-progress" class="progress-fill orange"></div></div>
+          </div>
+          <div class="macro-tile">
+            <div class="macro-label">CARB</div>
+            <div class="macro-value"><span id="carb-value">0</span><span class="goal">/0</span></div>
+            <div class="progress-track small"><div id="carb-progress" class="progress-fill green"></div></div>
+          </div>
+        </section>
+
+        <section id="meal-list" class="meal-list"></section>
+
+        <section id="water-card" class="card row-card">
+          <div class="row-icon">💧</div>
+          <div class="row-text">
+            <div class="row-title">Water</div>
+            <div id="water-percent" class="row-sub">0% goal</div>
+          </div>
+          <div id="water-ml" class="row-value">0 ml</div>
+          <button id="btn-add-water" class="plus-btn">+</button>
+        </section>
+
+        <section class="card row-card static">
+          <div class="row-icon">📏</div>
+          <div class="row-text">
+            <div class="row-title">Measurements</div>
+            <div class="row-sub">Track progress, not vibes</div>
+          </div>
+        </section>
+
+        <section class="card row-card static">
+          <div class="row-icon">🏋️</div>
+          <div class="row-text">
+            <div class="row-title">Workouts</div>
+            <div class="row-sub">Log your activity</div>
+          </div>
+        </section>
+      </main>
+
+      <footer id="logging-bar" class="logging-bar">
+        <div class="logging-meta">
+          <span id="logging-meal-label">Logging to Breakfast</span>
+          <span id="logging-spinner" class="spinner hidden"></span>
+        </div>
+        <form id="text-log-form" class="logging-row">
+          <input id="text-log-input" type="text" placeholder="Describe what you ate, or tap 🎤 on the keyboard to dictate" autocomplete="off" />
+          <input id="camera-input" type="file" accept="image/*" capture="environment" hidden />
+          <button type="button" id="btn-camera" class="round-btn" aria-label="Photo">📷</button>
+          <button type="submit" id="btn-send" class="round-btn" aria-label="Send">➤</button>
+        </form>
+        <div id="logging-feedback" class="logging-feedback"></div>
+      </footer>
+    </section>
+
+    <!-- Settings screen -->
+    <section id="screen-settings" class="screen hidden">
+      <header class="topbar">
+        <button id="btn-back" class="icon-btn" aria-label="Back">←</button>
+        <h1>Settings</h1>
+        <span></span>
+      </header>
+      <main class="content">
+        <section class="card form-card">
+          <h2>Daily goals</h2>
+          <label>Calories <input id="goal-kcal" type="number" step="50" /></label>
+          <label>Protein (g) <input id="goal-protein" type="number" step="5" /></label>
+          <label>Fat (g) <input id="goal-fat" type="number" step="5" /></label>
+          <label>Carbs (g) <input id="goal-carb" type="number" step="5" /></label>
+          <label>Water (ml) <input id="goal-water" type="number" step="100" /></label>
+        </section>
+
+        <section class="card form-card">
+          <h2>Claude model</h2>
+          <div class="segmented">
+            <label><input type="radio" name="model" value="sonnet" /> Sonnet (recommended)</label>
+            <label><input type="radio" name="model" value="haiku" /> Haiku (cheaper)</label>
+          </div>
+        </section>
+
+        <section class="card form-card">
+          <h2>Claude API key</h2>
+          <input id="api-key-input" type="password" placeholder="sk-ant-..." autocomplete="off" />
+          <button id="btn-save-key" class="primary-btn">Save</button>
+          <p id="api-key-status" class="hint"></p>
+          <p class="hint">Ключ хранится только в localStorage этого браузера на этом устройстве, никуда не отправляется, кроме api.anthropic.com.</p>
+        </section>
+      </main>
+    </section>
+
+    <!-- Search sheet -->
+    <dialog id="search-dialog">
+      <div class="sheet-header">
+        <h2>Search</h2>
+        <button id="btn-close-search" class="icon-btn">✕</button>
+      </div>
+      <input id="search-input" type="text" placeholder="Search previous foods..." />
+      <ul id="search-results" class="search-results"></ul>
+    </dialog>
+
+    <!-- Manual create sheet -->
+    <dialog id="create-dialog">
+      <div class="sheet-header">
+        <h2>Create</h2>
+        <button id="btn-close-create" class="icon-btn">✕</button>
+      </div>
+      <form id="create-form">
+        <label>Name <input id="create-name" type="text" required /></label>
+        <label>Grams <input id="create-grams" type="number" step="1" /></label>
+        <label>Kcal <input id="create-kcal" type="number" step="1" required /></label>
+        <label>Protein (g) <input id="create-protein" type="number" step="1" /></label>
+        <label>Fat (g) <input id="create-fat" type="number" step="1" /></label>
+        <label>Carbs (g) <input id="create-carb" type="number" step="1" /></label>
+        <button type="submit" class="primary-btn">Add</button>
+      </form>
+    </dialog>
+
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
