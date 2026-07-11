@@ -1,6 +1,7 @@
 import { Storage } from "./storage.js";
 import { ClaudeClient, ClaudeAPIError } from "./claude.js";
 import { computeGoals, ACTIVITY_LABELS, GOAL_LABELS } from "./calc.js";
+import { Garmin } from "./garmin.js";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "☀️" },
@@ -96,18 +97,45 @@ function renderWeekSelector() {
 
 function renderSummary(day, profile) {
   const totals = Storage.totals(day);
-  const goal = day.calorieGoal || profile.dailyCalorieGoal;
+  const garminDay = Garmin.dayFor(day.date);
+  const activeCalories = garminDay?.activeCalories || 0;
+  const goal = (day.calorieGoal || profile.dailyCalorieGoal) + activeCalories;
   const left = goal - totals.kcal;
   const progress = goal > 0 ? Math.min(Math.max(totals.kcal / goal, 0), 1) : 0;
 
   el("eaten-value").textContent = totals.kcal;
   el("left-value").textContent = left;
   el("calorie-progress").style.width = `${progress * 100}%`;
-  el("calorie-goal-label").textContent = `${goal} kcal`;
+  el("calorie-goal-label").textContent = activeCalories
+    ? `${goal} kcal (${day.calorieGoal} + ${activeCalories} from Garmin)`
+    : `${goal} kcal`;
 
   setMacro("protein", totals.protein, day.proteinGoalG);
   setMacro("fat", totals.fat, day.fatGoalG);
   setMacro("carb", totals.carb, day.carbGoalG);
+}
+
+function renderGarminCard(day) {
+  const garminDay = Garmin.dayFor(day.date);
+  const card = el("garmin-card");
+  if (!garminDay) {
+    card.classList.add("hidden");
+    return;
+  }
+  card.classList.remove("hidden");
+  const tiles = [
+    ["Steps", garminDay.steps ?? "—"],
+    ["Active kcal", garminDay.activeCalories ?? "—"],
+    ["Sleep", garminDay.sleepHours ? `${garminDay.sleepHours}h` : "—"],
+    ["Resting HR", garminDay.restingHeartRate ?? "—"],
+    ["HRV", garminDay.hrvLastNightAvg ?? "—"],
+    ["Body Battery", garminDay.bodyBatteryHigh ? `${garminDay.bodyBatteryLow}-${garminDay.bodyBatteryHigh}` : "—"],
+    ["Stress", garminDay.avgStressLevel ?? "—"],
+    ["Weight", garminDay.weightKg ? `${garminDay.weightKg}kg` : "—"]
+  ];
+  el("garmin-stats").innerHTML = tiles
+    .map(([label, value]) => `<div class="stat-tile"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`)
+    .join("");
 }
 
 function setMacro(name, value, goal) {
@@ -225,6 +253,7 @@ function renderAll() {
   const day = Storage.getDay(state.selectedDate);
   renderWeekSelector();
   renderSummary(day, profile);
+  renderGarminCard(day);
   renderMeals(day);
   renderWater(day);
   renderLoggingMealLabel();
@@ -745,6 +774,22 @@ el("btn-analyze").onclick = async () => {
   try {
     const model = ClaudeClient.modelIdFor(profile.preferredModel);
     const recentDays = Storage.recentDaysForAnalysis(state.selectedDate, 7);
+    for (const day of recentDays) {
+      const g = Garmin.dayFor(day.date);
+      if (g) {
+        day.garmin = {
+          steps: g.steps,
+          activeCalories: g.activeCalories,
+          sleepHours: g.sleepHours,
+          restingHeartRate: g.restingHeartRate,
+          hrvLastNightAvg: g.hrvLastNightAvg,
+          avgStressLevel: g.avgStressLevel,
+          bodyBatteryHigh: g.bodyBatteryHigh,
+          bodyBatteryLow: g.bodyBatteryLow,
+          activities: g.activities
+        };
+      }
+    }
     const text = await ClaudeClient.analyzeNutrition(profile.apiKey, model, profile, recentDays);
     Storage.saveLastReport(text);
     renderReportsScreen();
@@ -766,3 +811,10 @@ if ("serviceWorker" in navigator) {
 // ---------- init ----------
 
 renderAll();
+
+Garmin.preload().then(() => {
+  if (Garmin.isAvailable()) {
+    Storage.importGarminWeights(Garmin.allDays());
+    renderAll();
+  }
+});

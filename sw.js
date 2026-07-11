@@ -1,5 +1,5 @@
 // Minimal offline shell cache — personal app, no need for anything fancier.
-const CACHE_NAME = "colorize-shell-v4";
+const CACHE_NAME = "colorize-shell-v5";
 const SHELL_FILES = [
   "./",
   "./index.html",
@@ -8,6 +8,7 @@ const SHELL_FILES = [
   "./js/storage.js",
   "./js/claude.js",
   "./js/calc.js",
+  "./js/garmin.js",
   "./manifest.json"
 ];
 

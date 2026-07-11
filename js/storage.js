@@ -59,9 +59,14 @@ function saveRoot(root) {
 }
 
 function dateKey(date) {
+  // Build the key from LOCAL date components. toISOString() converts to UTC first, which
+  // shifts the calendar day for any positive UTC offset (e.g. UTC+3) — "today" at local
+  // midnight becomes "yesterday" in UTC, silently filing entries under the wrong date.
   const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD, local-agnostic enough for personal use
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export const Storage = {
@@ -214,13 +219,14 @@ export const Storage = {
 
   // ---------- body measurements ----------
 
-  addMeasurement(weightKg, note = "") {
+  addMeasurement(weightKg, note = "", date = new Date()) {
     const root = loadRoot();
-    const entry = { id: crypto.randomUUID(), date: new Date().toISOString(), weightKg, note };
+    const entry = { id: crypto.randomUUID(), date: new Date(date).toISOString(), weightKg, note };
     root.measurements.push(entry);
     root.measurements.sort((a, b) => new Date(a.date) - new Date(b.date));
     // Keep the profile's weight in sync so BMR/TDEE always uses the latest reading.
-    root.profile.weightKg = weightKg;
+    const isLatest = root.measurements[root.measurements.length - 1].id === entry.id;
+    if (isLatest) root.profile.weightKg = weightKg;
     saveRoot(root);
     return entry;
   },
@@ -233,6 +239,23 @@ export const Storage = {
 
   allMeasurements() {
     return loadRoot().measurements;
+  },
+
+  hasMeasurementOnDate(date) {
+    const key = dateKey(date);
+    return loadRoot().measurements.some((m) => dateKey(m.date) === key);
+  },
+
+  /** Auto-log weigh-ins from Garmin that aren't already recorded — dedupe by day, never overwrites a manual entry. */
+  importGarminWeights(garminDays) {
+    let imported = 0;
+    for (const day of garminDays) {
+      if (!day.weightKg) continue;
+      if (this.hasMeasurementOnDate(day.date)) continue;
+      this.addMeasurement(day.weightKg, "Garmin", day.date);
+      imported++;
+    }
+    return imported;
   },
 
   // ---------- reports ----------
