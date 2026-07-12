@@ -4,7 +4,7 @@ import { computeGoals, ACTIVITY_LABELS, GOAL_LABELS } from "./calc.js";
 import { Garmin } from "./garmin.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-07-11.4";
+const APP_VERSION = "2026-07-12.1";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "☀️" },
@@ -18,7 +18,8 @@ const state = {
   weekAnchor: new Date(),
   openMeals: new Set(["breakfast"]),
   activeMealTypeForDialog: "breakfast",
-  editingItemId: null // non-null while create-dialog is repurposed for editing an existing item
+  editingItemId: null, // non-null while create-dialog is repurposed for editing an existing item
+  dialogBase: null // original grams/kcal/macros snapshot, used to scale macros when grams changes
 };
 
 const el = (id) => document.getElementById(id);
@@ -323,6 +324,7 @@ el("btn-close-search").onclick = () => el("search-dialog").close();
 function openCreateDialog(mealType) {
   state.activeMealTypeForDialog = mealType;
   state.editingItemId = null;
+  state.dialogBase = null; // nothing to scale from yet — user is entering fresh values
   el("create-form").reset();
   el("create-dialog-title").textContent = "Create";
   el("create-submit-btn").textContent = "Add";
@@ -334,6 +336,9 @@ function openEditDialog(day, mealType, itemId) {
   if (!item) return;
   state.activeMealTypeForDialog = mealType;
   state.editingItemId = itemId;
+  // Snapshot at open time, so scaling multiple grams edits in one sitting is always
+  // relative to the original values, not compounding rounding from a previous scale.
+  state.dialogBase = { grams: item.grams, kcal: item.kcal, proteinG: item.proteinG, fatG: item.fatG, carbG: item.carbG };
   el("create-name").value = item.name;
   el("create-grams").value = item.grams;
   el("create-kcal").value = item.kcal;
@@ -346,6 +351,24 @@ function openEditDialog(day, mealType, itemId) {
 }
 
 el("btn-close-create").onclick = () => el("create-dialog").close();
+
+// Changing the portion size scales kcal/macros proportionally, like every other
+// calorie tracker — editing grams alone used to silently leave "Left" unchanged.
+el("create-grams").addEventListener("input", () => {
+  const base = state.dialogBase;
+  if (!base || !base.grams) return;
+  const newGrams = parseFloat(el("create-grams").value);
+  if (!newGrams || newGrams <= 0) return;
+  const ratio = newGrams / base.grams;
+  el("create-kcal").value = Math.round(base.kcal * ratio);
+  el("create-protein").value = round1(base.proteinG * ratio);
+  el("create-fat").value = round1(base.fatG * ratio);
+  el("create-carb").value = round1(base.carbG * ratio);
+});
+
+function round1(n) {
+  return Math.round(n * 10) / 10;
+}
 
 el("create-form").addEventListener("submit", (e) => {
   e.preventDefault();
