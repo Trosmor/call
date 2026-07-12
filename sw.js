@@ -4,7 +4,7 @@
 // Network-first serves the freshest files whenever online and only falls back to
 // the cache when the network is unreachable, which is the right trade-off for a
 // personal app that is usually online.
-const CACHE_NAME = "colorize-shell-v7";
+const CACHE_NAME = "colorize-shell-v8";
 const SHELL_FILES = [
   "./",
   "./index.html",
@@ -31,21 +31,38 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// On flaky mobile connections a plain network-first fetch can hang for 10+ seconds
+// before failing, making the app feel frozen on open. Race the network against a
+// timeout: past the deadline serve the cached copy immediately, while the network
+// request keeps running in the background to refresh the cache for next time.
+const NETWORK_TIMEOUT_MS = 4000;
+
 self.addEventListener("fetch", (event) => {
   // Never touch API calls — always hit the network for Claude.
   if (event.request.url.includes("api.anthropic.com")) return;
   if (event.request.method !== "GET") return;
 
+  const networkPromise = fetch(event.request).then((response) => {
+    // Keep the cache fresh so the offline fallback is as recent as possible.
+    if (response.ok && new URL(event.request.url).origin === self.location.origin) {
+      const copy = response.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+    }
+    return response;
+  });
+  // If the cached copy wins the race, the losing network promise would otherwise
+  // reject with no handler attached when offline.
+  networkPromise.catch(() => {});
+
+  const timeoutPromise = new Promise((resolve) => {
+    setTimeout(async () => resolve(await caches.match(event.request)), NETWORK_TIMEOUT_MS);
+  });
+
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // Keep the cache fresh so the offline fallback is as recent as possible.
-        if (response.ok && new URL(event.request.url).origin === self.location.origin) {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-        }
-        return response;
-      })
-      .catch(() => caches.match(event.request))
+    Promise.race([networkPromise, timeoutPromise]).then(
+      // The timeout resolves undefined when there's no cached copy yet — in that case
+      // keep waiting on the network rather than failing the request outright.
+      (winner) => winner || networkPromise
+    ).catch(() => caches.match(event.request))
   );
 });

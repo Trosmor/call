@@ -4,7 +4,7 @@ import { computeGoals, ACTIVITY_LABELS, GOAL_LABELS } from "./calc.js";
 import { Garmin } from "./garmin.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-07-12.1";
+const APP_VERSION = "2026-07-13.1";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "☀️" },
@@ -861,4 +861,30 @@ Garmin.preload().then(() => {
     Storage.importGarminWeights(Garmin.allDays());
     renderAll();
   }
+});
+
+// iOS keeps an installed PWA frozen in memory for days. When the app is resumed after
+// midnight, selectedDate still points at the old "today", so new logs would silently
+// land on yesterday. On resume: roll selectedDate forward (only if the user hadn't
+// deliberately navigated to another day) and re-fetch Garmin data, which also goes
+// stale across a suspend.
+let autoSelectedKey = Storage.dateKey(state.selectedDate);
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+
+  const todayKey = Storage.dateKey(new Date());
+  if (todayKey !== autoSelectedKey && Storage.dateKey(state.selectedDate) === autoSelectedKey) {
+    state.selectedDate = new Date();
+    state.weekAnchor = new Date();
+    autoSelectedKey = todayKey;
+    renderAll();
+  }
+
+  Garmin.refresh().then((changed) => {
+    if (changed) {
+      Storage.importGarminWeights(Garmin.allDays());
+      renderAll();
+    }
+  });
 });

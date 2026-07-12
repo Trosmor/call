@@ -26,6 +26,19 @@ export const Garmin = {
     return load();
   },
 
+  /**
+   * Re-fetches garmin.json, bypassing the session cache — used when the PWA is resumed
+   * after a suspend, since the sync workflow may have committed new data meanwhile.
+   * Resolves to true if the data actually changed.
+   */
+  async refresh() {
+    const before = cache ? cache.syncedAt : null;
+    cache = null;
+    loadPromise = null;
+    const data = await load();
+    return !!data && data.syncedAt !== before;
+  },
+
   /** Synchronous lookup — call after preload() has resolved. Returns null if unavailable. */
   dayFor(dateKey) {
     if (!cache || !cache.days) return null;
