@@ -1,17 +1,17 @@
 {
-  "syncedAt": "2026-07-12T20:48:59.867995+00:00",
+  "syncedAt": "2026-07-12T22:49:20.032030+00:00",
   "days": [
     {
       "date": "2026-07-12",
-      "steps": 1049,
-      "activeCalories": 65.0,
-      "totalCalories": 1521.0,
-      "restingHeartRate": 63,
+      "steps": 4536,
+      "activeCalories": 146.0,
+      "totalCalories": 2316.0,
+      "restingHeartRate": 64,
       "sleepHours": 7.1,
       "sleepScore": null,
       "hrvLastNightAvg": 26,
       "hrvStatus": "UNBALANCED",
-      "avgStressLevel": 29,
+      "avgStressLevel": 31,
       "bodyBatteryHigh": 49,
       "bodyBatteryLow": 10,
       "weightKg": null,
