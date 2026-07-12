@@ -1,11 +1,27 @@
 {
-  "syncedAt": "2026-07-11T22:48:35.581984+00:00",
+  "syncedAt": "2026-07-12T02:46:38.614366+00:00",
   "days": [
     {
+      "date": "2026-07-12",
+      "steps": 37,
+      "activeCalories": 5.0,
+      "totalCalories": 300.0,
+      "restingHeartRate": 63,
+      "sleepHours": null,
+      "sleepScore": null,
+      "hrvLastNightAvg": null,
+      "hrvStatus": null,
+      "avgStressLevel": 33,
+      "bodyBatteryHigh": 18,
+      "bodyBatteryLow": 10,
+      "weightKg": null,
+      "activities": []
+    },
+    {
       "date": "2026-07-11",
-      "steps": 10904,
-      "activeCalories": 464.0,
-      "totalCalories": 2683.0,
+      "steps": 10920,
+      "activeCalories": 468.0,
+      "totalCalories": 2794.0,
       "restingHeartRate": 63,
       "sleepHours": 8.3,
       "sleepScore": null,
@@ -13,7 +29,7 @@
       "hrvStatus": "UNBALANCED",
       "avgStressLevel": 35,
       "bodyBatteryHigh": 62,
-      "bodyBatteryLow": 15,
+      "bodyBatteryLow": 12,
       "weightKg": null,
       "activities": []
     },
@@ -270,37 +286,6 @@
           "durationMin": 32.2,
           "calories": 190.0,
           "avgHeartRate": 112.0
-        }
-      ]
-    },
-    {
-      "date": "2026-06-28",
-      "steps": 2688,
-      "activeCalories": 1004.0,
-      "totalCalories": 3330.0,
-      "restingHeartRate": 62,
-      "sleepHours": 5.6,
-      "sleepScore": null,
-      "hrvLastNightAvg": 26,
-      "hrvStatus": "BALANCED",
-      "avgStressLevel": 34,
-      "bodyBatteryHigh": 59,
-      "bodyBatteryLow": 5,
-      "weightKg": null,
-      "activities": [
-        {
-          "name": "Peniche Велосипед",
-          "type": "cycling",
-          "durationMin": 76.8,
-          "calories": 568.0,
-          "avgHeartRate": 141.0
-        },
-        {
-          "name": "Óbidos Велосипед",
-          "type": "cycling",
-          "durationMin": 72.4,
-          "calories": 408.0,
-          "avgHeartRate": 123.0
         }
       ]
     }
