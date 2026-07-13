@@ -68,7 +68,7 @@ export class ClaudeAPIError extends Error {}
 function extractText(data) {
   const block = (data.content || []).find((b) => b.type === "text");
   if (!block) throw new ClaudeAPIError("Не удалось разобрать ответ от Claude.");
-  return block.text;
+  return { text: block.text, truncated: data.stop_reason === "max_tokens" };
 }
 
 function parseFoodResponse(rawText) {
@@ -117,7 +117,7 @@ export const ClaudeClient = {
   },
 
   async analyzeFoodPhoto(apiKey, model, imageBase64, mediaType = "image/jpeg") {
-    const text = await send(apiKey, model, SYSTEM_PROMPT, [
+    const { text } = await send(apiKey, model, SYSTEM_PROMPT, [
       { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
       { type: "text", text: "Распознай еду на фото и верни JSON по схеме." }
     ]);
@@ -125,7 +125,7 @@ export const ClaudeClient = {
   },
 
   async analyzeFoodText(apiKey, model, text) {
-    const raw = await send(apiKey, model, SYSTEM_PROMPT, [{ type: "text", text }]);
+    const { text: raw } = await send(apiKey, model, SYSTEM_PROMPT, [{ type: "text", text }]);
     return parseFoodResponse(raw);
   },
 
@@ -143,12 +143,18 @@ export const ClaudeClient = {
       },
       days: recentDays
     };
-    return send(
+    // The prompt asks for 6 detailed sections (summary, quality, water, recovery,
+    // nutrition recs, training recs) — with Garmin data included this routinely runs
+    // past 1500 tokens and was getting cut off mid-sentence at the old limit.
+    const { text, truncated } = await send(
       apiKey,
       model,
       ANALYSIS_SYSTEM_PROMPT,
       [{ type: "text", text: JSON.stringify(payload) }],
-      1536
+      3000
     );
+    return truncated
+      ? text + "\n\n*(Ответ обрезан по лимиту длины — попробуй ещё раз или переключись на Sonnet, если сейчас выбран Haiku.)*"
+      : text;
   }
 };
