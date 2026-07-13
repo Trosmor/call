@@ -145,13 +145,15 @@ export const ClaudeClient = {
     };
     // The prompt asks for 6 detailed sections (summary, quality, water, recovery,
     // nutrition recs, training recs) — with Garmin data included this routinely runs
-    // past 1500 tokens and was getting cut off mid-sentence at the old limit.
+    // long. Sonnet 5's tokenizer also uses ~30% more tokens per word of output than
+    // older models, so a budget that looks generous by old intuition still wasn't
+    // enough (cut off at section 6 with a 3000 cap) — pushed well past that.
     const { text, truncated } = await send(
       apiKey,
       model,
       ANALYSIS_SYSTEM_PROMPT,
       [{ type: "text", text: JSON.stringify(payload) }],
-      3000
+      6000
     );
     return truncated
       ? text + "\n\n*(Ответ обрезан по лимиту длины — попробуй ещё раз или переключись на Sonnet, если сейчас выбран Haiku.)*"
