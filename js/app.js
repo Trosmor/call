@@ -4,7 +4,7 @@ import { computeGoals, ACTIVITY_LABELS, GOAL_LABELS } from "./calc.js";
 import { Garmin } from "./garmin.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-07-13.3";
+const APP_VERSION = "2026-07-15.1";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "☀️" },
@@ -55,6 +55,19 @@ function currentMealTypeHeuristic() {
   if (hour < 16) return "lunch";
   if (hour < 21) return "dinner";
   return "snack";
+}
+
+/**
+ * Single source of truth for "which meal does a new log land in", used both to render the
+ * "Logging to X" label and to actually route the entry — so what's displayed always matches
+ * what happens. If exactly one meal card is expanded, that's the target (matches how people
+ * naturally signal intent by opening the card first); otherwise fall back to time of day.
+ */
+function resolveDefaultMealType() {
+  if (state.openMeals.size === 1) {
+    return [...state.openMeals][0];
+  }
+  return currentMealTypeHeuristic();
 }
 
 // ---------- rendering ----------
@@ -158,6 +171,7 @@ function renderMeals(day) {
       if (state.openMeals.has(type)) state.openMeals.delete(type);
       else state.openMeals.add(type);
       renderMeals(day);
+      renderLoggingMealLabel(); // opening/closing a card changes where a new log will land
     };
   });
 
@@ -259,7 +273,7 @@ function renderWater(day) {
 }
 
 function renderLoggingMealLabel() {
-  const type = currentMealTypeHeuristic();
+  const type = resolveDefaultMealType();
   el("logging-meal-label").textContent = `Logging to ${MEAL_META[type].label}`;
 }
 
@@ -590,6 +604,26 @@ function setLoggingFeedback(message, kind) {
   node.className = "logging-feedback" + (kind ? ` ${kind}` : "");
 }
 
+/** Finds the logged item Claude meant by target_name, preferring target_meal_type when given. */
+function findLoggedItem(day, targetName, targetMealType) {
+  if (!targetName) return null;
+  const needle = targetName.trim().toLowerCase();
+  const mealsToSearch = targetMealType ? [targetMealType] : Storage.MEAL_TYPES;
+  for (const mealType of mealsToSearch) {
+    const items = day.meals[mealType] || [];
+    const exact = items.find((i) => i.name.toLowerCase() === needle);
+    if (exact) return { mealType, item: exact };
+  }
+  for (const mealType of mealsToSearch) {
+    const items = day.meals[mealType] || [];
+    const partial = items.find(
+      (i) => i.name.toLowerCase().includes(needle) || needle.includes(i.name.toLowerCase())
+    );
+    if (partial) return { mealType, item: partial };
+  }
+  return null;
+}
+
 async function applyClaudeResponse(response, thumbnailSource) {
   if (response.is_water && response.water_ml) {
     Storage.addWater(state.selectedDate, response.water_ml);
@@ -598,7 +632,41 @@ async function applyClaudeResponse(response, thumbnailSource) {
     return;
   }
 
-  const mealType = response.meal_type || currentMealTypeHeuristic();
+  const day = Storage.getDay(state.selectedDate);
+
+  if (response.action === "edit" || response.action === "delete") {
+    const match = findLoggedItem(day, response.target_name, response.target_meal_type);
+    if (!match) {
+      setLoggingFeedback(`Не нашёл "${response.target_name}" среди уже залогированного сегодня.`, "error");
+      return;
+    }
+    if (response.action === "delete") {
+      Storage.deleteFoodItem(state.selectedDate, match.mealType, match.item.id);
+      setLoggingFeedback(`Удалено: ${match.item.name} из ${MEAL_META[match.mealType].label}.`, "success");
+    } else {
+      const updated = response.items?.[0];
+      if (!updated) {
+        setLoggingFeedback("Claude не прислал новые значения для изменения.", "error");
+        return;
+      }
+      Storage.editFoodItem(state.selectedDate, match.mealType, match.item.id, {
+        name: updated.name || match.item.name,
+        grams: updated.grams,
+        kcal: updated.kcal,
+        proteinG: updated.protein_g,
+        fatG: updated.fat_g,
+        carbG: updated.carb_g
+      });
+      setLoggingFeedback(
+        `Изменено: ${updated.name || match.item.name} → ${Math.round(updated.grams)}g, ${updated.kcal} kcal (${MEAL_META[match.mealType].label}).`,
+        "success"
+      );
+    }
+    renderAll();
+    return;
+  }
+
+  const mealType = response.meal_type || resolveDefaultMealType();
   const summaries = [];
   for (const item of response.items || []) {
     Storage.addFoodItem(state.selectedDate, mealType, {
@@ -612,7 +680,10 @@ async function applyClaudeResponse(response, thumbnailSource) {
     });
     summaries.push(`${item.name} ${Math.round(item.grams)}g, ${item.kcal} kcal`);
   }
-  setLoggingFeedback(summaries.length ? `Added: ${summaries.join("; ")}` : "", "success");
+  setLoggingFeedback(
+    summaries.length ? `Added to ${MEAL_META[mealType].label}: ${summaries.join("; ")}` : "",
+    "success"
+  );
   renderAll();
 }
 
@@ -641,7 +712,19 @@ el("text-log-form").addEventListener("submit", async (e) => {
   const text = input.value.trim();
   if (!text) return;
   input.value = "";
-  await runClaudeRequest((apiKey, model) => ClaudeClient.analyzeFoodText(apiKey, model, text), "voice");
+  const day = Storage.getDay(state.selectedDate);
+  const alreadyLoggedByMeal = {};
+  for (const mealType of Storage.MEAL_TYPES) {
+    alreadyLoggedByMeal[mealType] = day.meals[mealType].map((i) => ({
+      name: i.name,
+      grams: i.grams,
+      kcal: i.kcal
+    }));
+  }
+  await runClaudeRequest(
+    (apiKey, model) => ClaudeClient.analyzeFoodText(apiKey, model, text, alreadyLoggedByMeal),
+    "voice"
+  );
 });
 
 el("btn-camera").onclick = () => el("camera-input").click();
