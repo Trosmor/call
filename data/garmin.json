@@ -1,11 +1,11 @@
 {
-  "syncedAt": "2026-07-16T06:18:22.065838+00:00",
+  "syncedAt": "2026-07-16T10:09:03.213851+00:00",
   "days": [
     {
       "date": "2026-07-16",
-      "steps": 33,
-      "activeCalories": 3.0,
-      "totalCalories": 697.0,
+      "steps": 447,
+      "activeCalories": 27.0,
+      "totalCalories": 1052.0,
       "restingHeartRate": 64,
       "sleepHours": 6.8,
       "sleepScore": null,
