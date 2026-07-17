@@ -102,15 +102,33 @@ function extractText(data) {
   return { text: block.text, truncated: data.stop_reason === "max_tokens" };
 }
 
-function parseFoodResponse(rawText) {
+/**
+ * Tolerant JSON extraction: the prompts forbid text outside the JSON, but models still
+ * occasionally add a preamble ("Вот оценка:"), wrap in ``` fences, or append a trailing
+ * remark. Try a direct parse first, then fall back to the outermost {...} substring.
+ */
+function extractJsonObject(rawText) {
   let text = rawText.trim();
   if (text.startsWith("```")) {
-    text = text.replace(/^```json/, "").replace(/```$/, "").trim();
+    text = text.replace(/^```(?:json)?/i, "").replace(/```\s*$/, "").trim();
   }
   try {
     return JSON.parse(text);
   } catch (e) {
-    throw new ClaudeAPIError("Claude вернул не-JSON ответ: " + text.slice(0, 200));
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      return JSON.parse(text.slice(start, end + 1)); // let this throw if still invalid
+    }
+    throw e;
+  }
+}
+
+function parseFoodResponse(rawText) {
+  try {
+    return extractJsonObject(rawText);
+  } catch (e) {
+    throw new ClaudeAPIError("Claude вернул не-JSON ответ: " + rawText.trim().slice(0, 200));
   }
 }
 
@@ -182,21 +200,27 @@ export const ClaudeClient = {
         carbGoalG: profile.carbGoalG
       }
     };
-    const { text } = await send(
+    // 1024, not less: Sonnet 5's tokenizer spends ~30% more tokens per word, and a
+    // truncated response here means broken JSON (unterminated comment string).
+    const { text, truncated } = await send(
       apiKey,
       model,
       MEAL_RATING_SYSTEM_PROMPT,
       [{ type: "text", text: JSON.stringify(payload) }],
-      512
+      1024
     );
     let parsed;
     try {
-      parsed = JSON.parse(text.trim().replace(/^```json/, "").replace(/```$/, "").trim());
+      parsed = extractJsonObject(text);
     } catch (e) {
-      throw new ClaudeAPIError("Claude вернул не-JSON ответ при оценке приёма пищи.");
+      throw new ClaudeAPIError(
+        truncated
+          ? "Ответ оценки обрезался — попробуй ещё раз."
+          : "Claude вернул не-JSON ответ при оценке приёма пищи. Попробуй ещё раз."
+      );
     }
     if (typeof parsed.score !== "number" || !parsed.comment) {
-      throw new ClaudeAPIError("Не удалось разобрать оценку приёма пищи.");
+      throw new ClaudeAPIError("Не удалось разобрать оценку приёма пищи. Попробуй ещё раз.");
     }
     return { score: Math.max(0, Math.min(100, Math.round(parsed.score))), comment: parsed.comment };
   },

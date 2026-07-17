@@ -4,7 +4,7 @@ import { computeGoals, ACTIVITY_LABELS, GOAL_LABELS } from "./calc.js";
 import { Garmin } from "./garmin.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-07-15.2";
+const APP_VERSION = "2026-07-15.3";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "☀️" },
