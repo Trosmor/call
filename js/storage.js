@@ -35,8 +35,21 @@ function emptyDay(dateKey, profile) {
       lunch: [],
       dinner: [],
       snack: []
+    },
+    // score: 0-100, comment: string, itemsSignature: used to detect the meal changed since
+    // rating (so the UI can show "outdated" instead of silently displaying a stale score).
+    mealRatings: {
+      breakfast: null,
+      lunch: null,
+      dinner: null,
+      snack: null
     }
   };
+}
+
+/** Cheap fingerprint of a meal's contents — used to tell whether a saved rating is stale. */
+function mealItemsSignature(items) {
+  return items.map((i) => `${i.name}:${Math.round(i.grams)}:${i.kcal}`).sort().join("|");
 }
 
 function loadRoot() {
@@ -106,6 +119,10 @@ export const Storage = {
     const key = dateKey(date);
     if (!root.days[key]) {
       root.days[key] = emptyDay(key, root.profile);
+      saveRoot(root);
+    } else if (!root.days[key].mealRatings) {
+      // Backfill for days created before mealRatings existed.
+      root.days[key].mealRatings = { breakfast: null, lunch: null, dinner: null, snack: null };
       saveRoot(root);
     }
     return root.days[key];
@@ -255,6 +272,27 @@ export const Storage = {
 
   mealTotalKcal(day, mealType) {
     return day.meals[mealType].reduce((sum, i) => sum + i.kcal, 0);
+  },
+
+  // ---------- meal ratings ----------
+
+  mealItemsSignature(items) {
+    return mealItemsSignature(items);
+  },
+
+  saveMealRating(date, mealType, rating) {
+    const root = loadRoot();
+    const key = dateKey(date);
+    const day = root.days[key];
+    if (!day) return;
+    if (!day.mealRatings) day.mealRatings = { breakfast: null, lunch: null, dinner: null, snack: null };
+    day.mealRatings[mealType] = {
+      score: rating.score,
+      comment: rating.comment,
+      itemsSignature: mealItemsSignature(day.meals[mealType]),
+      ratedAt: new Date().toISOString()
+    };
+    saveRoot(root);
   },
 
   // ---------- body measurements ----------

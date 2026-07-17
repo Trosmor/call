@@ -69,6 +69,26 @@ hrvLastNightAvg, avgStressLevel, bodyBatteryHigh/Low, activities (трениро
 
 Пиши по делу, без воды в тексте (в переносном смысле), не повторяй сырые цифры без интерпретации. Если данных мало (1-2 дня) — прямо скажи, что для точных выводов нужно больше данных, но всё равно дай общие рекомендации по профилю.`;
 
+// Separate system prompt for per-meal scoring — a short structured verdict on one meal,
+// not the whole-day narrative the Reports screen produces.
+const MEAL_RATING_SYSTEM_PROMPT = `Ты — персональный нутрициолог, оценивающий ОДИН конкретный приём пищи пользователя личного трекера калорий.
+Тебе дают: тип приёма пищи (breakfast/lunch/dinner/snack), список продуктов в нём (название, граммы, ккал, БЖУ), и профиль пользователя
+(цель — похудение/поддержание/набор, дневные цели по калориям и БЖУ) для контекста.
+
+Оцени приём пищи по шкале 0-100, где ориентируйся на:
+- Баланс БЖУ для этого типа приёма пищи (например, завтрак без белка — минус, ужин с преобладанием быстрых углеводов на ночь — минус).
+- Соответствие порции разумной доле дневного бюджета калорий (грубо: завтрак/обед/ужин — по 25-35% дневной цели, снек — 5-15%; сильное превышение или явно голодная порция — минус).
+- Качество продуктов, насколько можно судить по названиям (обработанная еда, фастфуд, много сахара — минус; цельные продукты, овощи, достаточно белка и клетчатки — плюс).
+- Разумный здравый смысл нутрициолога, а не формальный подсчёт — не придирайся к мелочам, если приём пищи в целом сбалансирован.
+
+Верни СТРОГО валидный JSON без markdown-обёртки, по схеме:
+{
+  "score": integer 0-100,
+  "comment": "string, 2-4 предложения на русском: что было хорошо, что не так, и конкретный совет как улучшить именно этот приём пищи в следующий раз"
+}
+
+Пиши по делу, без общих фраз ("следите за питанием"), комментарий должен быть про конкретные продукты из списка. Никакого текста вне JSON.`;
+
 const MODEL_IDS = {
   sonnet: "claude-sonnet-5",
   haiku: "claude-haiku-4-5"
@@ -147,6 +167,38 @@ export const ClaudeClient = {
       : text;
     const { text: raw } = await send(apiKey, model, SYSTEM_PROMPT, [{ type: "text", text: content }]);
     return parseFoodResponse(raw);
+  },
+
+  /** Returns { score: 0-100, comment }. */
+  async rateMeal(apiKey, model, mealType, items, profile) {
+    const payload = {
+      meal_type: mealType,
+      items,
+      profile: {
+        goal: profile.goal,
+        dailyCalorieGoal: profile.dailyCalorieGoal,
+        proteinGoalG: profile.proteinGoalG,
+        fatGoalG: profile.fatGoalG,
+        carbGoalG: profile.carbGoalG
+      }
+    };
+    const { text } = await send(
+      apiKey,
+      model,
+      MEAL_RATING_SYSTEM_PROMPT,
+      [{ type: "text", text: JSON.stringify(payload) }],
+      512
+    );
+    let parsed;
+    try {
+      parsed = JSON.parse(text.trim().replace(/^```json/, "").replace(/```$/, "").trim());
+    } catch (e) {
+      throw new ClaudeAPIError("Claude вернул не-JSON ответ при оценке приёма пищи.");
+    }
+    if (typeof parsed.score !== "number" || !parsed.comment) {
+      throw new ClaudeAPIError("Не удалось разобрать оценку приёма пищи.");
+    }
+    return { score: Math.max(0, Math.min(100, Math.round(parsed.score))), comment: parsed.comment };
   },
 
   /** Returns markdown text, not JSON — see ANALYSIS_SYSTEM_PROMPT. */

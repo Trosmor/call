@@ -4,7 +4,7 @@ import { computeGoals, ACTIVITY_LABELS, GOAL_LABELS } from "./calc.js";
 import { Garmin } from "./garmin.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-07-15.1";
+const APP_VERSION = "2026-07-15.2";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "☀️" },
@@ -220,6 +220,49 @@ function renderMeals(day) {
       renderAll();
     };
   });
+
+  container.querySelectorAll("[data-rate-meal]").forEach((btn) => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      await rateMeal(btn.dataset.rateMeal);
+    };
+  });
+}
+
+async function rateMeal(mealType) {
+  const profile = Storage.getProfile();
+  if (!profile.apiKey) {
+    setLoggingFeedback("Укажи Claude API-ключ в Настройках.", "error");
+    return;
+  }
+  const day = Storage.getDay(state.selectedDate);
+  const items = day.meals[mealType];
+  if (!items.length) return;
+
+  setLoggingFeedback(`Оцениваю ${MEAL_META[mealType].label.toLowerCase()}...`, "");
+  try {
+    const model = ClaudeClient.modelIdFor(profile.preferredModel);
+    const payloadItems = items.map((i) => ({
+      name: i.name,
+      grams: i.grams,
+      kcal: i.kcal,
+      protein_g: i.proteinG,
+      fat_g: i.fatG,
+      carb_g: i.carbG
+    }));
+    const rating = await ClaudeClient.rateMeal(profile.apiKey, model, mealType, payloadItems, profile);
+    Storage.saveMealRating(state.selectedDate, mealType, rating);
+    setLoggingFeedback(`${MEAL_META[mealType].label}: ${rating.score}/100`, "success");
+    renderAll();
+  } catch (err) {
+    setLoggingFeedback(err instanceof ClaudeAPIError ? err.message : `Ошибка: ${err.message}`, "error");
+  }
+}
+
+function scoreBadgeClass(score) {
+  if (score >= 80) return "score-good";
+  if (score >= 50) return "score-mid";
+  return "score-bad";
 }
 
 function mealCardHTML(day, type) {
@@ -227,6 +270,8 @@ function mealCardHTML(day, type) {
   const items = day.meals[type];
   const kcal = Storage.mealTotalKcal(day, type);
   const isOpen = state.openMeals.has(type);
+  const rating = day.mealRatings && day.mealRatings[type];
+  const isStale = rating && rating.itemsSignature !== Storage.mealItemsSignature(items);
 
   const rows = items
     .map(
@@ -240,6 +285,13 @@ function mealCardHTML(day, type) {
     )
     .join("");
 
+  const ratingBlock = rating
+    ? `<div class="meal-rating">
+        ${escapeHtml(rating.comment)}
+        ${isStale ? `<div class="meal-rating-stale">Состав изменился с момента оценки — оцени заново.</div>` : ""}
+      </div>`
+    : "";
+
   return `
     <div class="meal-card">
       <div class="meal-header" id="meal-header-${type}">
@@ -249,6 +301,7 @@ function mealCardHTML(day, type) {
           <div class="meal-sub">${items.length} items</div>
         </div>
         <div class="meal-kcal-badge">${kcal} kcal</div>
+        ${rating && !isStale ? `<div class="meal-score-badge ${scoreBadgeClass(rating.score)}">${rating.score}</div>` : ""}
         <div class="chevron">${isOpen ? "▲" : "▼"}</div>
       </div>
       <div class="meal-body ${isOpen ? "open" : ""}">
@@ -257,10 +310,16 @@ function mealCardHTML(day, type) {
             ? `<div class="items-header"><span>TITLE</span><span>GRAMS</span><span>KCAL</span><span></span></div>${rows}`
             : ""
         }
+        ${ratingBlock}
         <div class="add-food-row">
           <button class="btn-search" data-search-meal="${type}">Search</button>
           <button class="btn-create" data-create-meal="${type}">Create</button>
           <button class="btn-repeat-meal" data-repeat-meal="${type}">↻ Repeat yesterday's ${meta.label.toLowerCase()}</button>
+          ${
+            items.length
+              ? `<button class="btn-rate-meal" data-rate-meal="${type}">${rating ? "⭐ Re-rate" : "⭐ Rate meal"}</button>`
+              : ""
+          }
         </div>
       </div>
     </div>`;

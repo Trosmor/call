@@ -8,6 +8,7 @@
   --orange: #ff9500;
   --blue: #4a90d9;
   --green: #34c759;
+  --red: #ff453a;
   --black: #1c1c1e;
 }
 
@@ -169,6 +170,31 @@ html, body {
   font-weight: 600;
 }
 .chevron { color: var(--muted); font-size: 12px; margin-left: 8px; }
+
+.meal-score-badge {
+  color: white;
+  padding: 4px 9px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-left: 6px;
+}
+.meal-score-badge.score-good { background: var(--green); }
+.meal-score-badge.score-mid { background: var(--orange); }
+.meal-score-badge.score-bad { background: var(--red); }
+
+.meal-rating {
+  background: rgba(128,128,128,0.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.meal-rating-stale { color: var(--muted); font-size: 11px; margin-top: 6px; font-style: italic; }
+.btn-rate-meal {
+  background: none; border: none; color: var(--text); font-weight: 600; font-size: 13px;
+}
 
 .meal-body { padding: 0 16px 16px; display: none; }
 .meal-body.open { display: block; }

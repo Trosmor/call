@@ -4,7 +4,7 @@
 // Network-first serves the freshest files whenever online and only falls back to
 // the cache when the network is unreachable, which is the right trade-off for a
 // personal app that is usually online.
-const CACHE_NAME = "colorize-shell-v8";
+const CACHE_NAME = "colorize-shell-v9";
 const SHELL_FILES = [
   "./",
   "./index.html",
