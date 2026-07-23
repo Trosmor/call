@@ -1,21 +1,29 @@
 {
-  "syncedAt": "2026-07-23T17:41:07.040721+00:00",
+  "syncedAt": "2026-07-23T19:17:41.162919+00:00",
   "days": [
     {
       "date": "2026-07-23",
-      "steps": 50,
-      "activeCalories": 4.0,
-      "totalCalories": 842.0,
+      "steps": 3184,
+      "activeCalories": 312.0,
+      "totalCalories": 2127.0,
       "restingHeartRate": 64,
       "sleepHours": 7.0,
       "sleepScore": null,
       "hrvLastNightAvg": 28,
       "hrvStatus": "BALANCED",
-      "avgStressLevel": 23,
+      "avgStressLevel": 27,
       "bodyBatteryHigh": 54,
       "bodyBatteryLow": 12,
       "weightKg": null,
-      "activities": []
+      "activities": [
+        {
+          "name": "Сил. трен.",
+          "type": "strength_training",
+          "durationMin": 61.8,
+          "calories": 310.0,
+          "avgHeartRate": 114.0
+        }
+      ]
     },
     {
       "date": "2026-07-22",
