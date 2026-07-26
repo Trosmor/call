@@ -1,21 +1,29 @@
 {
-  "syncedAt": "2026-07-26T17:01:32.885118+00:00",
+  "syncedAt": "2026-07-26T19:10:12.472075+00:00",
   "days": [
     {
       "date": "2026-07-26",
-      "steps": 218,
-      "activeCalories": 2.0,
-      "totalCalories": 1433.0,
+      "steps": 3643,
+      "activeCalories": 177.0,
+      "totalCalories": 1939.0,
       "restingHeartRate": 59,
       "sleepHours": 9.7,
       "sleepScore": null,
       "hrvLastNightAvg": 32,
       "hrvStatus": "BALANCED",
-      "avgStressLevel": 21,
+      "avgStressLevel": 22,
       "bodyBatteryHigh": 86,
       "bodyBatteryLow": 22,
       "weightKg": null,
-      "activities": []
+      "activities": [
+        {
+          "name": "Óbidos Бег",
+          "type": "running",
+          "durationMin": 20.2,
+          "calories": 192.0,
+          "avgHeartRate": 164.0
+        }
+      ]
     },
     {
       "date": "2026-07-25",
