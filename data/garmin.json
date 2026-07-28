@@ -1,19 +1,35 @@
 {
-  "syncedAt": "2026-07-27T23:01:41.443009+00:00",
+  "syncedAt": "2026-07-28T02:32:07.802500+00:00",
   "days": [
     {
+      "date": "2026-07-28",
+      "steps": null,
+      "activeCalories": 0.0,
+      "totalCalories": 132.0,
+      "restingHeartRate": 64,
+      "sleepHours": null,
+      "sleepScore": null,
+      "hrvLastNightAvg": null,
+      "hrvStatus": null,
+      "avgStressLevel": 25,
+      "bodyBatteryHigh": 35,
+      "bodyBatteryLow": 29,
+      "weightKg": null,
+      "activities": []
+    },
+    {
       "date": "2026-07-27",
-      "steps": 13824,
-      "activeCalories": 582.0,
-      "totalCalories": 2652.0,
+      "steps": 13905,
+      "activeCalories": 588.0,
+      "totalCalories": 2914.0,
       "restingHeartRate": 58,
       "sleepHours": 7.1,
       "sleepScore": null,
       "hrvLastNightAvg": 33,
       "hrvStatus": "BALANCED",
-      "avgStressLevel": 21,
+      "avgStressLevel": 23,
       "bodyBatteryHigh": 94,
-      "bodyBatteryLow": 33,
+      "bodyBatteryLow": 29,
       "weightKg": null,
       "activities": [
         {
@@ -286,30 +302,6 @@
           "durationMin": 45.3,
           "calories": 365.0,
           "avgHeartRate": 138.0
-        }
-      ]
-    },
-    {
-      "date": "2026-07-14",
-      "steps": 3188,
-      "activeCalories": 304.0,
-      "totalCalories": 2630.0,
-      "restingHeartRate": 59,
-      "sleepHours": 7.2,
-      "sleepScore": null,
-      "hrvLastNightAvg": 27,
-      "hrvStatus": "BALANCED",
-      "avgStressLevel": 26,
-      "bodyBatteryHigh": 71,
-      "bodyBatteryLow": 24,
-      "weightKg": null,
-      "activities": [
-        {
-          "name": "Сил. трен.",
-          "type": "strength_training",
-          "durationMin": 43.0,
-          "calories": 243.0,
-          "avgHeartRate": 114.0
         }
       ]
     }
