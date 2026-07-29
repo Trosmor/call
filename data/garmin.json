@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-07-29T17:14:52.913479+00:00",
+  "syncedAt": "2026-07-29T19:16:16.896687+00:00",
   "days": [
     {
       "date": "2026-07-29",
@@ -15,7 +15,15 @@
       "bodyBatteryHigh": 77,
       "bodyBatteryLow": 29,
       "weightKg": null,
-      "activities": []
+      "activities": [
+        {
+          "name": "Peniche Inline Skating",
+          "type": "inline_skating",
+          "durationMin": 20.7,
+          "calories": 210.0,
+          "avgHeartRate": 167.0
+        }
+      ]
     },
     {
       "date": "2026-07-28",
