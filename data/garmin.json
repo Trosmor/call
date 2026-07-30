@@ -1,35 +1,43 @@
 {
-  "syncedAt": "2026-07-30T14:01:16.773320+00:00",
+  "syncedAt": "2026-07-30T17:27:10.885497+00:00",
   "days": [
     {
       "date": "2026-07-30",
-      "steps": null,
-      "activeCalories": null,
-      "totalCalories": null,
-      "restingHeartRate": null,
-      "sleepHours": null,
+      "steps": 913,
+      "activeCalories": 25.0,
+      "totalCalories": 1685.0,
+      "restingHeartRate": 62,
+      "sleepHours": 6.8,
       "sleepScore": null,
-      "hrvLastNightAvg": null,
-      "hrvStatus": null,
-      "avgStressLevel": null,
-      "bodyBatteryHigh": null,
-      "bodyBatteryLow": null,
+      "hrvLastNightAvg": 29,
+      "hrvStatus": "BALANCED",
+      "avgStressLevel": 22,
+      "bodyBatteryHigh": 70,
+      "bodyBatteryLow": 21,
       "weightKg": null,
-      "activities": []
+      "activities": [
+        {
+          "name": "Сил. трен.",
+          "type": "strength_training",
+          "durationMin": 46.9,
+          "calories": 223.0,
+          "avgHeartRate": 116.0
+        }
+      ]
     },
     {
       "date": "2026-07-29",
-      "steps": 2638,
-      "activeCalories": 322.0,
-      "totalCalories": 2407.0,
+      "steps": 2749,
+      "activeCalories": 333.0,
+      "totalCalories": 2659.0,
       "restingHeartRate": 60,
       "sleepHours": 6.8,
       "sleepScore": null,
       "hrvLastNightAvg": 29,
       "hrvStatus": "BALANCED",
-      "avgStressLevel": 25,
+      "avgStressLevel": 26,
       "bodyBatteryHigh": 77,
-      "bodyBatteryLow": 27,
+      "bodyBatteryLow": 21,
       "weightKg": null,
       "activities": [
         {
