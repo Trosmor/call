@@ -1,6 +1,22 @@
 {
-  "syncedAt": "2026-07-29T22:59:24.664222+00:00",
+  "syncedAt": "2026-07-30T02:24:46.354817+00:00",
   "days": [
+    {
+      "date": "2026-07-30",
+      "steps": null,
+      "activeCalories": null,
+      "totalCalories": null,
+      "restingHeartRate": null,
+      "sleepHours": null,
+      "sleepScore": null,
+      "hrvLastNightAvg": null,
+      "hrvStatus": null,
+      "avgStressLevel": null,
+      "bodyBatteryHigh": null,
+      "bodyBatteryLow": null,
+      "weightKg": null,
+      "activities": []
+    },
     {
       "date": "2026-07-29",
       "steps": 2638,
@@ -288,30 +304,6 @@
       "bodyBatteryLow": 8,
       "weightKg": null,
       "activities": []
-    },
-    {
-      "date": "2026-07-16",
-      "steps": 1902,
-      "activeCalories": 448.0,
-      "totalCalories": 2774.0,
-      "restingHeartRate": 64,
-      "sleepHours": 6.8,
-      "sleepScore": null,
-      "hrvLastNightAvg": 26,
-      "hrvStatus": "BALANCED",
-      "avgStressLevel": 34,
-      "bodyBatteryHigh": 44,
-      "bodyBatteryLow": 8,
-      "weightKg": null,
-      "activities": [
-        {
-          "name": "Óbidos Велосипед",
-          "type": "cycling",
-          "durationMin": 61.7,
-          "calories": 385.0,
-          "avgHeartRate": 127.0
-        }
-      ]
     }
   ]
 }
