@@ -1,19 +1,35 @@
 {
-  "syncedAt": "2026-07-30T23:07:30.258380+00:00",
+  "syncedAt": "2026-07-31T02:49:14.087207+00:00",
   "days": [
     {
+      "date": "2026-07-31",
+      "steps": null,
+      "activeCalories": 0.0,
+      "totalCalories": 111.0,
+      "restingHeartRate": 64,
+      "sleepHours": null,
+      "sleepScore": null,
+      "hrvLastNightAvg": null,
+      "hrvStatus": null,
+      "avgStressLevel": 28,
+      "bodyBatteryHigh": 26,
+      "bodyBatteryLow": 20,
+      "weightKg": null,
+      "activities": []
+    },
+    {
       "date": "2026-07-30",
-      "steps": 3878,
-      "activeCalories": 278.0,
-      "totalCalories": 2326.0,
+      "steps": 4044,
+      "activeCalories": 289.0,
+      "totalCalories": 2615.0,
       "restingHeartRate": 62,
       "sleepHours": 6.8,
       "sleepScore": null,
       "hrvLastNightAvg": 29,
       "hrvStatus": "BALANCED",
-      "avgStressLevel": 26,
+      "avgStressLevel": 27,
       "bodyBatteryHigh": 70,
-      "bodyBatteryLow": 21,
+      "bodyBatteryLow": 20,
       "weightKg": null,
       "activities": [
         {
@@ -294,22 +310,6 @@
       "avgStressLevel": 39,
       "bodyBatteryHigh": 57,
       "bodyBatteryLow": 9,
-      "weightKg": null,
-      "activities": []
-    },
-    {
-      "date": "2026-07-17",
-      "steps": 4942,
-      "activeCalories": 186.0,
-      "totalCalories": 2512.0,
-      "restingHeartRate": 62,
-      "sleepHours": 6.8,
-      "sleepScore": null,
-      "hrvLastNightAvg": 28,
-      "hrvStatus": "BALANCED",
-      "avgStressLevel": 27,
-      "bodyBatteryHigh": 56,
-      "bodyBatteryLow": 8,
       "weightKg": null,
       "activities": []
     }
