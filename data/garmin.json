@@ -1,17 +1,33 @@
 {
-  "syncedAt": "2026-08-04T23:03:31.189066+00:00",
+  "syncedAt": "2026-08-05T02:30:33.143616+00:00",
   "days": [
     {
+      "date": "2026-08-05",
+      "steps": null,
+      "activeCalories": 0.0,
+      "totalCalories": 206.0,
+      "restingHeartRate": 66,
+      "sleepHours": null,
+      "sleepScore": null,
+      "hrvLastNightAvg": null,
+      "hrvStatus": null,
+      "avgStressLevel": 35,
+      "bodyBatteryHigh": 5,
+      "bodyBatteryLow": 5,
+      "weightKg": null,
+      "activities": []
+    },
+    {
       "date": "2026-08-04",
-      "steps": 6858,
-      "activeCalories": 460.0,
-      "totalCalories": 2367.0,
+      "steps": 7096,
+      "activeCalories": 505.0,
+      "totalCalories": 2831.0,
       "restingHeartRate": 65,
       "sleepHours": 6.7,
       "sleepScore": null,
       "hrvLastNightAvg": 23,
       "hrvStatus": "BALANCED",
-      "avgStressLevel": 45,
+      "avgStressLevel": 48,
       "bodyBatteryHigh": 31,
       "bodyBatteryLow": 5,
       "weightKg": null,
@@ -286,30 +302,6 @@
           "durationMin": 61.8,
           "calories": 310.0,
           "avgHeartRate": 114.0
-        }
-      ]
-    },
-    {
-      "date": "2026-07-22",
-      "steps": 5175,
-      "activeCalories": 560.0,
-      "totalCalories": 2886.0,
-      "restingHeartRate": 61,
-      "sleepHours": 7.1,
-      "sleepScore": null,
-      "hrvLastNightAvg": 27,
-      "hrvStatus": "BALANCED",
-      "avgStressLevel": 32,
-      "bodyBatteryHigh": 63,
-      "bodyBatteryLow": 11,
-      "weightKg": null,
-      "activities": [
-        {
-          "name": "Peniche Inline Skating",
-          "type": "inline_skating",
-          "durationMin": 25.1,
-          "calories": 268.0,
-          "avgHeartRate": 165.0
         }
       ]
     }
