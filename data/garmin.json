@@ -1,6 +1,22 @@
 {
-  "syncedAt": "2026-08-05T22:58:44.846524+00:00",
+  "syncedAt": "2026-08-06T02:33:15.420089+00:00",
   "days": [
+    {
+      "date": "2026-08-06",
+      "steps": null,
+      "activeCalories": null,
+      "totalCalories": null,
+      "restingHeartRate": null,
+      "sleepHours": null,
+      "sleepScore": null,
+      "hrvLastNightAvg": null,
+      "hrvStatus": null,
+      "avgStressLevel": null,
+      "bodyBatteryHigh": null,
+      "bodyBatteryLow": null,
+      "weightKg": null,
+      "activities": []
+    },
     {
       "date": "2026-08-05",
       "steps": 7544,
@@ -278,30 +294,6 @@
           "durationMin": 68.4,
           "calories": 446.0,
           "avgHeartRate": 130.0
-        }
-      ]
-    },
-    {
-      "date": "2026-07-23",
-      "steps": 3730,
-      "activeCalories": 336.0,
-      "totalCalories": 2662.0,
-      "restingHeartRate": 64,
-      "sleepHours": 7.0,
-      "sleepScore": null,
-      "hrvLastNightAvg": 28,
-      "hrvStatus": "BALANCED",
-      "avgStressLevel": 28,
-      "bodyBatteryHigh": 54,
-      "bodyBatteryLow": 12,
-      "weightKg": null,
-      "activities": [
-        {
-          "name": "Сил. трен.",
-          "type": "strength_training",
-          "durationMin": 61.8,
-          "calories": 310.0,
-          "avgHeartRate": 114.0
         }
       ]
     }
