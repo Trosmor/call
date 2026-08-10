@@ -1,11 +1,11 @@
 {
-  "syncedAt": "2026-08-10T07:41:03.884216+00:00",
+  "syncedAt": "2026-08-10T09:20:57.058507+00:00",
   "days": [
     {
       "date": "2026-08-10",
       "steps": 187,
       "activeCalories": 7.0,
-      "totalCalories": 835.0,
+      "totalCalories": 1002.0,
       "restingHeartRate": 61,
       "sleepHours": 6.5,
       "sleepScore": null,
