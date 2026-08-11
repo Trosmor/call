@@ -1,19 +1,35 @@
 {
-  "syncedAt": "2026-08-10T22:36:51.370850+00:00",
+  "syncedAt": "2026-08-11T01:43:44.007383+00:00",
   "days": [
     {
+      "date": "2026-08-11",
+      "steps": null,
+      "activeCalories": 0.0,
+      "totalCalories": 32.0,
+      "restingHeartRate": 64,
+      "sleepHours": null,
+      "sleepScore": null,
+      "hrvLastNightAvg": null,
+      "hrvStatus": null,
+      "avgStressLevel": 20,
+      "bodyBatteryHigh": 28,
+      "bodyBatteryLow": 26,
+      "weightKg": null,
+      "activities": []
+    },
+    {
       "date": "2026-08-10",
-      "steps": 6069,
-      "activeCalories": 190.0,
-      "totalCalories": 2160.0,
+      "steps": 6238,
+      "activeCalories": 194.0,
+      "totalCalories": 2520.0,
       "restingHeartRate": 61,
       "sleepHours": 6.5,
       "sleepScore": null,
       "hrvLastNightAvg": 27,
       "hrvStatus": "BALANCED",
-      "avgStressLevel": 26,
+      "avgStressLevel": 27,
       "bodyBatteryHigh": 69,
-      "bodyBatteryLow": 28,
+      "bodyBatteryLow": 26,
       "weightKg": null,
       "activities": []
     },
@@ -238,30 +254,6 @@
           "durationMin": 20.7,
           "calories": 210.0,
           "avgHeartRate": 167.0
-        }
-      ]
-    },
-    {
-      "date": "2026-07-28",
-      "steps": 1239,
-      "activeCalories": 387.0,
-      "totalCalories": 2713.0,
-      "restingHeartRate": 60,
-      "sleepHours": 6.8,
-      "sleepScore": null,
-      "hrvLastNightAvg": 26,
-      "hrvStatus": "BALANCED",
-      "avgStressLevel": 24,
-      "bodyBatteryHigh": 76,
-      "bodyBatteryLow": 27,
-      "weightKg": null,
-      "activities": [
-        {
-          "name": "Óbidos Велосипед",
-          "type": "cycling",
-          "durationMin": 82.4,
-          "calories": 438.0,
-          "avgHeartRate": 126.0
         }
       ]
     }
