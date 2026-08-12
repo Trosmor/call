@@ -1,21 +1,29 @@
 {
-  "syncedAt": "2026-08-12T16:56:25.404952+00:00",
+  "syncedAt": "2026-08-12T19:01:51.328766+00:00",
   "days": [
     {
       "date": "2026-08-12",
-      "steps": 964,
-      "activeCalories": 20.0,
-      "totalCalories": 1378.0,
+      "steps": 5526,
+      "activeCalories": 197.0,
+      "totalCalories": 1943.0,
       "restingHeartRate": 61,
       "sleepHours": 5.0,
       "sleepScore": null,
       "hrvLastNightAvg": 28,
       "hrvStatus": "BALANCED",
-      "avgStressLevel": 26,
+      "avgStressLevel": 28,
       "bodyBatteryHigh": 52,
       "bodyBatteryLow": 16,
       "weightKg": null,
-      "activities": []
+      "activities": [
+        {
+          "name": "Funchal Ходьба",
+          "type": "walking",
+          "durationMin": 36.4,
+          "calories": 235.0,
+          "avgHeartRate": 131.0
+        }
+      ]
     },
     {
       "date": "2026-08-11",
