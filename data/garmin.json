@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-08-13T19:02:19.597363+00:00",
+  "syncedAt": "2026-08-13T20:42:03.073851+00:00",
   "days": [
     {
       "date": "2026-08-13",
@@ -15,7 +15,15 @@
       "bodyBatteryHigh": 37,
       "bodyBatteryLow": 5,
       "weightKg": null,
-      "activities": []
+      "activities": [
+        {
+          "name": "Santana Ходьба",
+          "type": "walking",
+          "durationMin": 49.6,
+          "calories": 215.0,
+          "avgHeartRate": 104.0
+        }
+      ]
     },
     {
       "date": "2026-08-12",
