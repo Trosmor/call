@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-08-16T04:35:29.096377+00:00",
+  "syncedAt": "2026-08-16T06:39:01.307399+00:00",
   "days": [
     {
       "date": "2026-08-16",
@@ -10,7 +10,7 @@
       "sleepHours": null,
       "sleepScore": null,
       "hrvLastNightAvg": null,
-      "hrvStatus": null,
+      "hrvStatus": "BALANCED",
       "avgStressLevel": 79,
       "bodyBatteryHigh": 5,
       "bodyBatteryLow": 5,
