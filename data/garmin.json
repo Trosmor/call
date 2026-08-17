@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-08-17T18:39:10.139641+00:00",
+  "syncedAt": "2026-08-17T20:26:44.614821+00:00",
   "days": [
     {
       "date": "2026-08-17",
@@ -15,7 +15,15 @@
       "bodyBatteryHigh": 5,
       "bodyBatteryLow": 5,
       "weightKg": null,
-      "activities": []
+      "activities": [
+        {
+          "name": "Óbidos Ходьба",
+          "type": "walking",
+          "durationMin": 20.2,
+          "calories": 108.0,
+          "avgHeartRate": 114.0
+        }
+      ]
     },
     {
       "date": "2026-08-16",
