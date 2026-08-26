@@ -1,17 +1,33 @@
 {
-  "syncedAt": "2026-08-25T22:26:58.542162+00:00",
+  "syncedAt": "2026-08-26T01:17:09.978597+00:00",
   "days": [
     {
+      "date": "2026-08-26",
+      "steps": null,
+      "activeCalories": 0.0,
+      "totalCalories": 187.0,
+      "restingHeartRate": 62,
+      "sleepHours": null,
+      "sleepScore": null,
+      "hrvLastNightAvg": null,
+      "hrvStatus": null,
+      "avgStressLevel": 19,
+      "bodyBatteryHigh": 58,
+      "bodyBatteryLow": 43,
+      "weightKg": null,
+      "activities": []
+    },
+    {
       "date": "2026-08-25",
-      "steps": 456,
-      "activeCalories": 29.0,
-      "totalCalories": 1767.0,
+      "steps": 1507,
+      "activeCalories": 61.0,
+      "totalCalories": 2387.0,
       "restingHeartRate": 56,
       "sleepHours": 8.0,
       "sleepScore": null,
       "hrvLastNightAvg": 33,
       "hrvStatus": "UNBALANCED",
-      "avgStressLevel": 21,
+      "avgStressLevel": 22,
       "bodyBatteryHigh": 94,
       "bodyBatteryLow": 34,
       "weightKg": null,
@@ -230,30 +246,6 @@
           "durationMin": 49.6,
           "calories": 215.0,
           "avgHeartRate": 104.0
-        }
-      ]
-    },
-    {
-      "date": "2026-08-12",
-      "steps": 12122,
-      "activeCalories": 654.0,
-      "totalCalories": 2980.0,
-      "restingHeartRate": 61,
-      "sleepHours": 5.0,
-      "sleepScore": null,
-      "hrvLastNightAvg": 28,
-      "hrvStatus": "BALANCED",
-      "avgStressLevel": 34,
-      "bodyBatteryHigh": 52,
-      "bodyBatteryLow": 5,
-      "weightKg": null,
-      "activities": [
-        {
-          "name": "Funchal Ходьба",
-          "type": "walking",
-          "durationMin": 36.4,
-          "calories": 235.0,
-          "avgHeartRate": 131.0
         }
       ]
     }
