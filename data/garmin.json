@@ -1,19 +1,35 @@
 {
-  "syncedAt": "2026-08-26T22:46:21.556731+00:00",
+  "syncedAt": "2026-08-27T07:48:58.639996+00:00",
   "days": [
     {
+      "date": "2026-08-27",
+      "steps": null,
+      "activeCalories": 0.0,
+      "totalCalories": 14.0,
+      "restingHeartRate": 65,
+      "sleepHours": null,
+      "sleepScore": null,
+      "hrvLastNightAvg": null,
+      "hrvStatus": null,
+      "avgStressLevel": 33,
+      "bodyBatteryHigh": 35,
+      "bodyBatteryLow": 33,
+      "weightKg": null,
+      "activities": []
+    },
+    {
       "date": "2026-08-26",
-      "steps": 2423,
-      "activeCalories": 83.0,
-      "totalCalories": 2035.0,
+      "steps": 2836,
+      "activeCalories": 144.0,
+      "totalCalories": 2470.0,
       "restingHeartRate": 58,
       "sleepHours": 8.2,
       "sleepScore": null,
       "hrvLastNightAvg": 31,
       "hrvStatus": "BALANCED",
-      "avgStressLevel": 25,
+      "avgStressLevel": 27,
       "bodyBatteryHigh": 92,
-      "bodyBatteryLow": 40,
+      "bodyBatteryLow": 29,
       "weightKg": null,
       "activities": []
     },
@@ -224,30 +240,6 @@
       "bodyBatteryLow": 5,
       "weightKg": null,
       "activities": []
-    },
-    {
-      "date": "2026-08-13",
-      "steps": 17323,
-      "activeCalories": 732.0,
-      "totalCalories": 3058.0,
-      "restingHeartRate": 65,
-      "sleepHours": 7.1,
-      "sleepScore": null,
-      "hrvLastNightAvg": 28,
-      "hrvStatus": "BALANCED",
-      "avgStressLevel": 42,
-      "bodyBatteryHigh": 37,
-      "bodyBatteryLow": 5,
-      "weightKg": null,
-      "activities": [
-        {
-          "name": "Santana Ходьба",
-          "type": "walking",
-          "durationMin": 49.6,
-          "calories": 215.0,
-          "avgHeartRate": 104.0
-        }
-      ]
     }
   ]
 }
