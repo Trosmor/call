@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-05T13:16:25.239522+00:00",
+  "syncedAt": "2026-09-05T16:33:48.007628+00:00",
   "days": [
     {
       "date": "2026-09-05",
@@ -15,7 +15,15 @@
       "bodyBatteryHigh": 65,
       "bodyBatteryLow": 24,
       "weightKg": null,
-      "activities": []
+      "activities": [
+        {
+          "name": "Peniche Ходьба",
+          "type": "walking",
+          "durationMin": 55.3,
+          "calories": 265.0,
+          "avgHeartRate": 122.0
+        }
+      ]
     },
     {
       "date": "2026-09-04",
