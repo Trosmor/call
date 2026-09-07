@@ -1,21 +1,29 @@
 {
-  "syncedAt": "2026-09-07T15:31:55.229766+00:00",
+  "syncedAt": "2026-09-07T19:36:59.676081+00:00",
   "days": [
     {
       "date": "2026-09-07",
-      "steps": 604,
-      "activeCalories": 11.0,
-      "totalCalories": 1537.0,
+      "steps": 6078,
+      "activeCalories": 223.0,
+      "totalCalories": 2133.0,
       "restingHeartRate": 62,
       "sleepHours": 7.2,
       "sleepScore": null,
       "hrvLastNightAvg": 33,
       "hrvStatus": "BALANCED",
-      "avgStressLevel": 21,
+      "avgStressLevel": 22,
       "bodyBatteryHigh": 65,
       "bodyBatteryLow": 14,
       "weightKg": null,
-      "activities": []
+      "activities": [
+        {
+          "name": "Óbidos Ходьба",
+          "type": "walking",
+          "durationMin": 19.8,
+          "calories": 127.0,
+          "avgHeartRate": 126.0
+        }
+      ]
     },
     {
       "date": "2026-09-06",
