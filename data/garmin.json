@@ -1,21 +1,29 @@
 {
-  "syncedAt": "2026-09-08T14:10:51.641293+00:00",
+  "syncedAt": "2026-09-08T19:16:42.493853+00:00",
   "days": [
     {
       "date": "2026-09-08",
-      "steps": 532,
-      "activeCalories": 18.0,
-      "totalCalories": 1162.0,
+      "steps": 3617,
+      "activeCalories": 336.0,
+      "totalCalories": 2265.0,
       "restingHeartRate": 55,
       "sleepHours": 7.2,
       "sleepScore": null,
       "hrvLastNightAvg": 36,
       "hrvStatus": "BALANCED",
-      "avgStressLevel": 16,
+      "avgStressLevel": 22,
       "bodyBatteryHigh": 100,
-      "bodyBatteryLow": 41,
+      "bodyBatteryLow": 33,
       "weightKg": null,
-      "activities": []
+      "activities": [
+        {
+          "name": "Peniche Inline Skating",
+          "type": "inline_skating",
+          "durationMin": 23.9,
+          "calories": 264.0,
+          "avgHeartRate": 171.0
+        }
+      ]
     },
     {
       "date": "2026-09-07",
