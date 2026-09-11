@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-11T19:00:21.036203+00:00",
+  "syncedAt": "2026-09-11T22:17:12.236750+00:00",
   "days": [
     {
       "date": "2026-09-11",
@@ -15,7 +15,22 @@
       "bodyBatteryHigh": 89,
       "bodyBatteryLow": 30,
       "weightKg": null,
-      "activities": []
+      "activities": [
+        {
+          "name": "Óbidos Ходьба",
+          "type": "walking",
+          "durationMin": 49.8,
+          "calories": 202.0,
+          "avgHeartRate": 106.0
+        },
+        {
+          "name": "Óbidos Ходьба",
+          "type": "walking",
+          "durationMin": 39.0,
+          "calories": 213.0,
+          "avgHeartRate": 122.0
+        }
+      ]
     },
     {
       "date": "2026-09-10",
