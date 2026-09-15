@@ -1,5 +1,5 @@
 {
-  "syncedAt": "2026-09-15T17:57:16.292362+00:00",
+  "syncedAt": "2026-09-15T21:04:30.293663+00:00",
   "days": [
     {
       "date": "2026-09-15",
@@ -15,7 +15,15 @@
       "bodyBatteryHigh": 76,
       "bodyBatteryLow": 16,
       "weightKg": null,
-      "activities": []
+      "activities": [
+        {
+          "name": "Óbidos Велосипед",
+          "type": "cycling",
+          "durationMin": 97.1,
+          "calories": 510.0,
+          "avgHeartRate": 120.0
+        }
+      ]
     },
     {
       "date": "2026-09-14",
