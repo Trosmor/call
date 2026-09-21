@@ -1,17 +1,33 @@
 {
-  "syncedAt": "2026-09-20T23:52:20.840343+00:00",
+  "syncedAt": "2026-09-21T03:37:18.356963+00:00",
   "days": [
     {
+      "date": "2026-09-21",
+      "steps": 15,
+      "activeCalories": 0.0,
+      "totalCalories": 100.0,
+      "restingHeartRate": 67,
+      "sleepHours": null,
+      "sleepScore": null,
+      "hrvLastNightAvg": null,
+      "hrvStatus": null,
+      "avgStressLevel": 32,
+      "bodyBatteryHigh": 7,
+      "bodyBatteryLow": 5,
+      "weightKg": null,
+      "activities": []
+    },
+    {
       "date": "2026-09-20",
-      "steps": 2981,
-      "activeCalories": 101.0,
-      "totalCalories": 1736.0,
+      "steps": 4683,
+      "activeCalories": 180.0,
+      "totalCalories": 2482.0,
       "restingHeartRate": 64,
       "sleepHours": 6.9,
       "sleepScore": null,
       "hrvLastNightAvg": 30,
       "hrvStatus": "BALANCED",
-      "avgStressLevel": 33,
+      "avgStressLevel": 37,
       "bodyBatteryHigh": 36,
       "bodyBatteryLow": 5,
       "weightKg": null,
@@ -245,30 +261,6 @@
           "durationMin": 23.9,
           "calories": 264.0,
           "avgHeartRate": 171.0
-        }
-      ]
-    },
-    {
-      "date": "2026-09-07",
-      "steps": 6288,
-      "activeCalories": 233.0,
-      "totalCalories": 2535.0,
-      "restingHeartRate": 62,
-      "sleepHours": 7.2,
-      "sleepScore": null,
-      "hrvLastNightAvg": 33,
-      "hrvStatus": "BALANCED",
-      "avgStressLevel": 22,
-      "bodyBatteryHigh": 65,
-      "bodyBatteryLow": 14,
-      "weightKg": null,
-      "activities": [
-        {
-          "name": "Óbidos Ходьба",
-          "type": "walking",
-          "durationMin": 19.8,
-          "calories": 127.0,
-          "avgHeartRate": 126.0
         }
       ]
     }
