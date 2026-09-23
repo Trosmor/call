@@ -2,16 +2,45 @@ import { Storage } from "./storage.js";
 import { ClaudeClient, ClaudeAPIError } from "./claude.js";
 import { computeGoals, ACTIVITY_LABELS, GOAL_LABELS } from "./calc.js";
 import { Garmin } from "./garmin.js";
+import { icon, hydrateIcons } from "./icons.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-09-23.2";
+const APP_VERSION = "2026-09-23.3";
 
 const MEAL_META = {
-  breakfast: { label: "Breakfast", icon: "☀️" },
-  lunch: { label: "Lunch", icon: "🍴" },
-  dinner: { label: "Dinner", icon: "🌙" },
-  snack: { label: "Snack", icon: "🍪" }
+  breakfast: { label: "Breakfast", icon: "sun" },
+  lunch: { label: "Lunch", icon: "utensils" },
+  dinner: { label: "Dinner", icon: "moon" },
+  snack: { label: "Snack", icon: "apple" }
 };
+
+/** 1234 → "1 234" (narrow no-break space), the way the big numbers read best. */
+const fmt = (n) => Math.round(Number(n) || 0).toLocaleString("ru-RU");
+
+// ---------- theme ----------
+
+const THEME_KEY = "colorize-theme";
+const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+function themePreference() {
+  try {
+    return localStorage.getItem(THEME_KEY) || "dark";
+  } catch (e) {
+    return "dark";
+  }
+}
+
+/** Mirrors the inline script in index.html, which applies the theme before first paint. */
+function applyTheme() {
+  const pref = themePreference();
+  const dark = pref === "dark" || (pref === "auto" && darkQuery.matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  el("meta-theme-color").content = dark ? "#0a0a0c" : "#f2f1ed";
+}
+
+darkQuery.addEventListener("change", () => {
+  if (themePreference() === "auto") applyTheme();
+});
 
 const state = {
   selectedDate: new Date(),
@@ -78,21 +107,37 @@ function resolveDefaultMealType() {
 function renderWeekSelector() {
   const container = el("week-selector");
   const days = weekDates(state.weekAnchor);
+  const logged = Storage.peekDays(days);
+  const profile = Storage.getProfile();
+  const today = new Date();
   const dayCols = days
-    .map((d) => {
-      const selected = isSameDay(d, state.selectedDate) ? " selected" : "";
-      const weekday = d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
-      return `<div class="day-col${selected}" data-date="${d.toISOString()}">
+    .map((d, i) => {
+      const classes = ["day-col"];
+      if (isSameDay(d, state.selectedDate)) classes.push("selected");
+      if (isSameDay(d, today)) classes.push("today");
+      // Ring around the date = share of that day's budget eaten (only for days with food).
+      let ringStyle = "";
+      const day = logged[i];
+      const kcal = day ? Storage.totals(day).kcal : 0;
+      if (kcal > 0) {
+        const budget = effectiveBudget(day, profile);
+        const ratio = budget > 0 ? kcal / budget : 0;
+        classes.push("has-data");
+        if (ratio > 1.05) classes.push("over");
+        ringStyle = ` style="--p:${Math.round(Math.min(ratio, 1) * 100)}"`;
+      }
+      const weekday = d.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 2).toUpperCase();
+      return `<div class="${classes.join(" ")}" data-date="${d.toISOString()}">
         <div class="weekday">${weekday}</div>
-        <div class="num">${d.getDate()}</div>
+        <div class="num"${ringStyle}>${d.getDate()}</div>
       </div>`;
     })
     .join("");
 
   container.innerHTML = `
-    <button class="week-nav" id="week-prev">‹</button>
+    <button class="week-nav" id="week-prev" aria-label="Previous week">${icon("back")}</button>
     <div class="week-days">${dayCols}</div>
-    <button class="week-nav" id="week-next">›</button>
+    <button class="week-nav" id="week-next" aria-label="Next week">${icon("chevron-right")}</button>
   `;
 
   el("week-prev").onclick = () => {
@@ -125,19 +170,52 @@ function effectiveBudget(day, profile) {
   return (day.calorieGoal || profile.dailyCalorieGoal) + garminActiveCalories(day.date);
 }
 
+/** Fills an SVG progress ring (a <circle> with stroke) to `progress` ∈ [0, 1]. */
+function setRing(circle, progress) {
+  const circumference = 2 * Math.PI * Number(circle.getAttribute("r"));
+  const p = Math.min(Math.max(progress, 0), 1);
+  circle.style.strokeDasharray = `${circumference}`;
+  // A zero-length round-capped stroke still draws a dot — hide it entirely at 0.
+  circle.style.strokeDashoffset = `${circumference * (1 - p)}`;
+  circle.style.opacity = p > 0 ? "1" : "0";
+}
+
+function renderTopbar() {
+  const selected = dateOnly(state.selectedDate);
+  const diffDays = Math.round((selected - dateOnly(new Date())) / 86400000);
+  const title =
+    diffDays === 0 ? "Today"
+    : diffDays === -1 ? "Yesterday"
+    : diffDays === 1 ? "Tomorrow"
+    : selected.toLocaleDateString("en-US", { weekday: "long" });
+  el("today-title").textContent = title;
+  el("today-eyebrow").textContent = selected.toLocaleDateString("en-US", {
+    weekday: diffDays === 0 || Math.abs(diffDays) === 1 ? "long" : undefined,
+    day: "numeric",
+    month: "long"
+  });
+}
+
 function renderSummary(day, profile) {
   const totals = Storage.totals(day);
   const activeCalories = garminActiveCalories(day.date);
   const goal = effectiveBudget(day, profile);
   const left = goal - totals.kcal;
-  const progress = goal > 0 ? Math.min(Math.max(totals.kcal / goal, 0), 1) : 0;
+  const over = left < 0;
 
-  el("eaten-value").textContent = totals.kcal;
-  el("left-value").textContent = left;
-  el("calorie-progress").style.width = `${progress * 100}%`;
+  el("eaten-value").textContent = fmt(totals.kcal);
+  el("left-value").textContent = fmt(Math.abs(left));
+  el("left-label").textContent = over ? "kcal over" : "kcal left";
+  el("burned-value").textContent = activeCalories ? fmt(activeCalories) : "—";
+  el("goal-value").textContent = fmt(goal);
   el("calorie-goal-label").textContent = activeCalories
-    ? `${goal} kcal (${goal - activeCalories} + ${activeCalories} from Garmin)`
-    : `${goal} kcal`;
+    ? `Бюджет: ${fmt(goal - activeCalories)} цель + ${fmt(activeCalories)} активных с Garmin`
+    : "";
+
+  const ring = el("calorie-ring");
+  ring.setAttribute("stroke", over ? "url(#grad-over)" : "url(#grad-kcal)");
+  setRing(ring, goal > 0 ? totals.kcal / goal : 0);
+  document.querySelector(".hero-card").classList.toggle("over", over);
 
   setMacro("protein", totals.protein, day.proteinGoalG);
   setMacro("fat", totals.fat, day.fatGoalG);
@@ -153,12 +231,12 @@ function renderGarminCard(day) {
   }
   card.classList.remove("hidden");
   const tiles = [
-    ["Steps", garminDay.steps ?? "—"],
-    ["Active kcal", garminDay.activeCalories ?? "—"],
+    ["Steps", garminDay.steps != null ? fmt(garminDay.steps) : "—"],
+    ["Active kcal", garminDay.activeCalories != null ? fmt(garminDay.activeCalories) : "—"],
     ["Sleep", garminDay.sleepHours ? `${garminDay.sleepHours}h` : "—"],
-    ["Resting HR", garminDay.restingHeartRate ?? "—"],
+    ["Rest HR", garminDay.restingHeartRate ?? "—"],
     ["HRV", garminDay.hrvLastNightAvg ?? "—"],
-    ["Body Battery", garminDay.bodyBatteryHigh ? `${garminDay.bodyBatteryLow}-${garminDay.bodyBatteryHigh}` : "—"],
+    ["Battery", garminDay.bodyBatteryHigh ? `${garminDay.bodyBatteryLow}-${garminDay.bodyBatteryHigh}` : "—"],
     ["Stress", garminDay.avgStressLevel ?? "—"],
     ["Weight", garminDay.weightKg ? `${garminDay.weightKg}kg` : "—"]
   ];
@@ -174,8 +252,8 @@ function renderGarminCard(day) {
     ageNode.textContent = "";
     ageNode.className = "hint";
   } else {
-    const age = hours < 1 ? "меньше часа назад" : hours < 48 ? `${Math.round(hours)} ч назад` : `${Math.round(hours / 24)} дн назад`;
-    ageNode.textContent = `Обновлено ${age}${hours > 24 ? " — синк Garmin, похоже, сломался, проверь GitHub Actions" : ""}`;
+    const age = hours < 1 ? "< 1 ч назад" : hours < 48 ? `${Math.round(hours)} ч назад` : `${Math.round(hours / 24)} дн назад`;
+    ageNode.textContent = hours > 24 ? `${age} — синк сломался? Проверь GitHub Actions` : age;
     ageNode.className = hours > 24 ? "hint warn" : "hint";
   }
 }
@@ -199,10 +277,13 @@ function renderWorkouts(day) {
 }
 
 function setMacro(name, value, goal) {
-  el(`${name}-value`).textContent = value;
-  el(`${name}-value`).nextSibling.textContent = `/${goal}`;
-  const progress = goal > 0 ? Math.min(Math.max(value / goal, 0), 1) : 0;
+  const v = Math.round(Number(value) || 0);
+  const g = Math.round(Number(goal) || 0);
+  el(`${name}-value`).textContent = v;
+  el(`${name}-goal`).textContent = `/${g}g`;
+  const progress = g > 0 ? Math.min(Math.max(v / g, 0), 1) : 0;
   el(`${name}-progress`).style.width = `${progress * 100}%`;
+  el(`${name}-left`).textContent = !g ? "" : v <= g ? `${g - v}g left` : `${v - g}g over`;
 }
 
 function renderMeals(day) {
@@ -339,50 +420,56 @@ function mealCardHTML(day, type) {
     .map(
       (item) => `
     <div class="food-item-row">
-      <div class="food-item-name" data-edit-item data-meal-type="${type}" data-item-id="${item.id}">${escapeHtml(item.name)}<span class="food-item-macros">${Math.round(item.proteinG)}p · ${Math.round(item.fatG)}f · ${Math.round(item.carbG)}c</span></div>
-      <div class="food-item-grams">${Math.round(item.grams)}</div>
-      <div class="food-item-kcal">${item.kcal}</div>
-      <button class="food-item-delete" data-delete-item data-meal-type="${type}" data-item-id="${item.id}">✕</button>
+      <div class="food-item-name" data-edit-item data-meal-type="${type}" data-item-id="${item.id}">
+        <div class="food-item-title">${escapeHtml(item.name)}</div>
+        <span class="food-item-macros">${Math.round(item.grams)} g · <b class="p">P</b> ${Math.round(item.proteinG)} · <b class="f">F</b> ${Math.round(item.fatG)} · <b class="c">C</b> ${Math.round(item.carbG)}</span>
+      </div>
+      <div class="food-item-kcal">${fmt(item.kcal)}<small>kcal</small></div>
+      <button class="food-item-delete" aria-label="Delete" data-delete-item data-meal-type="${type}" data-item-id="${item.id}">${icon("x")}</button>
     </div>`
     )
     .join("");
 
+  const score = rating ? Math.min(Math.max(Math.round(Number(rating.score) || 0), 0), 100) : 0;
   const ratingBlock = rating
-    ? `<div class="meal-rating">
-        ${escapeHtml(rating.comment)}
-        ${rating.model ? `<div class="meal-rating-model">Оценка: ${escapeHtml(rating.model)}</div>` : ""}
-        ${isStale ? `<div class="meal-rating-stale">Состав изменился с момента оценки — оцени заново.</div>` : ""}
+    ? `<div class="meal-rating ${scoreBadgeClass(score)}">
+        <div class="score-ring" style="--p:${score}">${score}</div>
+        <div class="meal-rating-body">
+          ${escapeHtml(rating.comment)}
+          ${rating.model ? `<div class="meal-rating-model">Оценка: ${escapeHtml(rating.model)}</div>` : ""}
+          ${isStale ? `<div class="meal-rating-stale">Состав изменился с момента оценки — оцени заново.</div>` : ""}
+        </div>
       </div>`
     : "";
+
+  const sub = items.length ? `${items.length} ${items.length === 1 ? "item" : "items"}` : "Nothing logged yet";
 
   return `
     <div class="meal-card">
       <div class="meal-header" id="meal-header-${type}">
-        <div class="meal-icon">${meta.icon}</div>
+        <div class="meal-icon ${type}">${icon(meta.icon)}</div>
         <div>
           <div class="meal-title">${meta.label}</div>
-          <div class="meal-sub">${items.length} items</div>
+          <div class="meal-sub">${sub}</div>
         </div>
-        <div class="meal-kcal-badge">${kcal} kcal</div>
-        ${rating && !isStale ? `<div class="meal-score-badge ${scoreBadgeClass(rating.score)}">${rating.score}</div>` : ""}
-        <div class="chevron">${isOpen ? "▲" : "▼"}</div>
+        <div class="meal-right">
+          ${rating && !isStale ? `<div class="meal-score-badge ${scoreBadgeClass(score)}">${score}</div>` : ""}
+          <div class="meal-kcal${kcal ? "" : " empty"}">${fmt(kcal)}<small>kcal</small></div>
+          <span class="chevron${isOpen ? " open" : ""}">${icon("chevron-down")}</span>
+        </div>
       </div>
       <div class="meal-body ${isOpen ? "open" : ""}">
-        ${
-          items.length
-            ? `<div class="items-header"><span>TITLE</span><span>GRAMS</span><span>KCAL</span><span></span></div>${rows}`
-            : ""
-        }
+        ${items.length ? `<div class="food-list">${rows}</div>` : ""}
         ${ratingBlock}
-        <div class="add-food-row">
-          <button class="btn-search" data-search-meal="${type}">Search</button>
-          <button class="btn-create" data-create-meal="${type}">Create</button>
-          <button class="btn-repeat-meal" data-repeat-meal="${type}">↻ Repeat yesterday's ${meta.label.toLowerCase()}</button>
+        <div class="meal-actions">
+          <button class="chip-btn solid" data-search-meal="${type}">${icon("search")}Search</button>
+          <button class="chip-btn" data-create-meal="${type}">${icon("pencil")}Create</button>
           ${
             items.length
-              ? `<button class="btn-rate-meal" data-rate-meal="${type}">${ratingPending ? "⏳ Rating…" : rating ? "⭐ Re-rate" : "⭐ Rate meal"}</button>`
+              ? `<button class="chip-btn rate" data-rate-meal="${type}">${icon("sparkles")}${ratingPending ? "Rating…" : rating ? "Re-rate" : "Rate meal"}</button>`
               : ""
           }
+          <button class="chip-btn" data-repeat-meal="${type}">${icon("repeat")}Yesterday's ${meta.label.toLowerCase()}</button>
         </div>
       </div>
     </div>`;
@@ -390,8 +477,9 @@ function mealCardHTML(day, type) {
 
 function renderWater(day) {
   const percent = day.waterGoalMl > 0 ? Math.round((day.waterLoggedMl / day.waterGoalMl) * 100) : 0;
-  el("water-percent").textContent = `${percent}% goal`;
-  el("water-ml").textContent = `${day.waterLoggedMl} ml`;
+  el("water-percent").textContent = `${percent}% of ${fmt(day.waterGoalMl)} ml`;
+  el("water-ml").textContent = `${fmt(day.waterLoggedMl)} ml`;
+  el("water-progress").style.width = `${Math.min(percent, 100)}%`;
 }
 
 function renderLoggingMealLabel() {
@@ -408,6 +496,7 @@ function escapeHtml(str) {
 function renderAll() {
   const profile = Storage.getProfile();
   const day = Storage.getDay(state.selectedDate);
+  renderTopbar();
   renderWeekSelector();
   renderSummary(day, profile);
   renderGarminCard(day);
@@ -436,15 +525,20 @@ function renderSearchResults(query) {
   state.searchResults = Storage.allFoodItemsHistory()
     .filter((i) => (query ? i.name.toLowerCase().includes(query.toLowerCase()) : true))
     .slice(0, 30);
-  list.innerHTML = state.searchResults
-    .map(
-      (item, idx) => `<li data-result-index="${idx}">
-        <span>${escapeHtml(item.name)} — ${Math.round(item.grams)}g, ${item.kcal} kcal</span>
-        <span>+</span>
+  list.innerHTML =
+    state.searchResults
+      .map(
+        (item, idx) => `<li data-result-index="${idx}">
+        <div class="search-result-text">
+          <div class="search-result-name">${escapeHtml(item.name)}</div>
+          <div class="search-result-sub">${Math.round(item.grams)} g · ${fmt(item.kcal)} kcal</div>
+        </div>
+        <span class="search-add">${icon("plus")}</span>
       </li>`
-    )
-    .join("");
-  list.querySelectorAll("li").forEach((li) => {
+      )
+      .join("") ||
+    `<li class="search-empty">${query ? "Ничего не нашлось" : "Здесь появятся продукты, которые ты уже записывал"}</li>`;
+  list.querySelectorAll("li[data-result-index]").forEach((li) => {
     li.onclick = () => {
       const item = state.searchResults[Number(li.dataset.resultIndex)];
       if (!item) return;
@@ -620,6 +714,8 @@ function loadSettingsForm() {
     document.querySelector(`input[name="model"][value="${profile.preferredModel}"]`) ||
     document.querySelector('input[name="model"][value="sonnet"]');
   modelRadio.checked = true;
+  const themeRadio = document.querySelector(`input[name="theme"][value="${themePreference()}"]`);
+  if (themeRadio) themeRadio.checked = true;
   el("api-key-status").textContent = profile.apiKey ? "Key is set." : "No key set yet.";
   el("openrouter-key-status").textContent = profile.openrouterApiKey ? "Key is set." : "No key set yet.";
 
@@ -681,6 +777,17 @@ el("btn-calc-goals").onclick = () => {
       carbGoalG: parseInt(el("goal-carb").value, 10) || 0,
       waterGoalMl: parseInt(el("goal-water").value, 10) || 0
     });
+  });
+});
+
+document.querySelectorAll('input[name="theme"]').forEach((radio) => {
+  radio.addEventListener("change", () => {
+    try {
+      localStorage.setItem(THEME_KEY, radio.value);
+    } catch (e) {
+      // storage full/blocked — the theme still applies for this session
+    }
+    applyTheme();
   });
 });
 
@@ -995,23 +1102,40 @@ function renderWeightChart() {
   }
   card.classList.remove("hidden");
 
-  const width = 320, height = 120, padX = 24, padY = 16;
-  const weights = points.map((p) => p.weightKg);
+  const width = 320, height = 140, padLeft = 30, padRight = 8, padY = 14;
+  const weights = points.map((p) => num(p.weightKg));
   const minW = Math.min(...weights), maxW = Math.max(...weights);
   const range = maxW - minW || 1;
 
-  const xFor = (i) => padX + (i / (points.length - 1)) * (width - padX * 2);
+  const xFor = (i) => padLeft + (i / (points.length - 1)) * (width - padLeft - padRight);
   const yFor = (w) => padY + (1 - (w - minW) / range) * (height - padY * 2);
 
-  const linePoints = points.map((p, i) => `${xFor(i)},${yFor(p.weightKg)}`).join(" ");
-  const dots = points
-    .map((p, i) => `<circle class="chart-dot" cx="${xFor(i)}" cy="${yFor(p.weightKg)}" r="3"></circle>`)
-    .join("");
+  const coords = weights.map((w, i) => [xFor(i), yFor(w)]);
+  const linePoints = coords.map(([x, y]) => `${x},${y}`).join(" ");
+  const areaPath =
+    `M${coords[0][0]},${height - padY} ` +
+    coords.map(([x, y]) => `L${x},${y}`).join(" ") +
+    ` L${coords[coords.length - 1][0]},${height - padY} Z`;
+  // Dots only while they're still distinguishable; a long history reads better as a line.
+  const dots = points.length <= 30
+    ? coords.map(([x, y]) => `<circle class="chart-dot" cx="${x}" cy="${y}" r="3"></circle>`).join("")
+    : `<circle class="chart-dot" cx="${coords[coords.length - 1][0]}" cy="${coords[coords.length - 1][1]}" r="3.5"></circle>`;
 
   el("weight-chart").innerHTML = `
     <svg class="weight-chart" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-      <text class="chart-label" x="${padX}" y="10">${maxW.toFixed(1)}</text>
-      <text class="chart-label" x="${padX}" y="${height - 4}">${minW.toFixed(1)}</text>
+      <defs>
+        <linearGradient id="grad-weight-line" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#ffb547" /><stop offset="1" stop-color="#ff4f6d" />
+        </linearGradient>
+        <linearGradient id="grad-weight-area" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ff4f6d" stop-opacity="0.28" /><stop offset="1" stop-color="#ff4f6d" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <line class="chart-grid" x1="${padLeft}" x2="${width - padRight}" y1="${padY}" y2="${padY}"></line>
+      <line class="chart-grid" x1="${padLeft}" x2="${width - padRight}" y1="${height - padY}" y2="${height - padY}"></line>
+      <text class="chart-label" x="0" y="${padY + 3}">${maxW.toFixed(1)}</text>
+      <text class="chart-label" x="0" y="${height - padY + 3}">${minW.toFixed(1)}</text>
+      <path class="chart-area" d="${areaPath}"></path>
       <polyline class="chart-line" points="${linePoints}"></polyline>
       ${dots}
     </svg>`;
@@ -1024,12 +1148,12 @@ function renderMeasurements() {
   list.innerHTML = measurements
     .map(
       (m) => `<li>
-        <span>${new Date(m.date).toLocaleDateString()}</span>
-        <span>${num(m.weightKg).toFixed(1)} kg</span>
-        <button data-delete-measurement="${m.id}">✕</button>
+        <span>${new Date(m.date).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}</span>
+        <span class="measure-value">${num(m.weightKg).toFixed(1)} kg</span>
+        <button aria-label="Delete" data-delete-measurement="${m.id}">${icon("x")}</button>
       </li>`
     )
-    .join("") || `<li><span>No entries yet</span></li>`;
+    .join("") || `<li><span class="hint">No entries yet</span></li>`;
 
   list.querySelectorAll("[data-delete-measurement]").forEach((btn) => {
     btn.onclick = () => {
@@ -1055,7 +1179,7 @@ function renderReportsScreen() {
   const stats = Storage.weeklyStats(state.selectedDate, 7, garminActiveCalories);
   const grid = el("weekly-stats");
   const tiles = [
-    ["Avg calories", stats.daysLogged ? stats.avgKcal : "—"],
+    ["Avg calories", stats.daysLogged ? fmt(stats.avgKcal) : "—"],
     ["Days on target", `${stats.onTargetPct}%`],
     ["Avg protein", `${stats.avgProtein}g`],
     ["Avg fat", `${stats.avgFat}g`],
@@ -1165,6 +1289,8 @@ if ("serviceWorker" in navigator) {
 // ---------- init ----------
 
 el("app-version").textContent = `Colorize ${APP_VERSION}`;
+applyTheme();
+hydrateIcons();
 renderAll();
 
 Garmin.preload().then(() => {

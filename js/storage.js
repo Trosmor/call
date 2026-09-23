@@ -166,6 +166,12 @@ export const Storage = {
     return root.days[key];
   },
 
+  /** Read-only lookup of several days at once — null where none exists (getDay would create them). */
+  peekDays(dates) {
+    const days = loadRoot().days;
+    return dates.map((d) => days[dateKey(d)] || null);
+  },
+
   saveDay(day) {
     const root = loadRoot();
     root.days[day.date] = day;

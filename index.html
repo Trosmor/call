@@ -1,12 +1,22 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <title>Colorize</title>
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="theme-color" content="#faf7f2" />
+  <meta id="meta-theme-color" name="theme-color" content="#0a0a0c" />
+  <!-- Apply the saved theme before first paint — otherwise the app flashes light on every open. -->
+  <script>
+    (function () {
+      var pref = "dark";
+      try { pref = localStorage.getItem("colorize-theme") || "dark"; } catch (e) {}
+      var dark = pref === "dark" || (pref === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+      document.getElementById("meta-theme-color").content = dark ? "#0a0a0c" : "#f2f1ed";
+    })();
+  </script>
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="styles.css" />
@@ -16,89 +26,119 @@
 
     <!-- Today screen -->
     <section id="screen-today" class="screen">
-      <header class="topbar">
-        <h1>Colorize</h1>
-        <button id="btn-settings" class="icon-btn" aria-label="Settings">⚙️</button>
+      <header class="topbar large">
+        <div class="title-block">
+          <div id="today-eyebrow" class="eyebrow"></div>
+          <h1 id="today-title">Today</h1>
+        </div>
+        <button id="btn-settings" class="icon-btn" aria-label="Settings" data-icon="settings"></button>
       </header>
 
       <main class="content">
         <nav id="week-selector" class="week-selector"></nav>
 
-        <button id="btn-repeat-yesterday" class="repeat-btn">↻ Repeat yesterday</button>
-
-        <section class="card calorie-card">
-          <div class="calorie-row">
-            <div>
-              <div id="eaten-value" class="big-num">0</div>
-              <div class="label">EATEN</div>
-            </div>
-            <div class="right">
-              <div id="left-value" class="big-num">0</div>
-              <div class="label">LEFT</div>
+        <section class="card hero-card">
+          <div class="hero-ring">
+            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+              <defs>
+                <linearGradient id="grad-kcal" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#ffb547" />
+                  <stop offset="1" stop-color="#ff4f6d" />
+                </linearGradient>
+                <linearGradient id="grad-over" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#ff6b5b" />
+                  <stop offset="1" stop-color="#d7263d" />
+                </linearGradient>
+              </defs>
+              <circle class="ring-track" cx="60" cy="60" r="52" />
+              <circle id="calorie-ring" class="ring-fill" cx="60" cy="60" r="52" stroke="url(#grad-kcal)" />
+            </svg>
+            <div class="ring-center">
+              <div id="left-value" class="ring-num">0</div>
+              <div id="left-label" class="ring-label">kcal left</div>
             </div>
           </div>
-          <div class="progress-track"><div id="calorie-progress" class="progress-fill orange"></div></div>
-          <div id="calorie-goal-label" class="goal-label">0 kcal</div>
+          <div class="hero-stats">
+            <div class="hero-stat">
+              <span class="hero-stat-icon eaten" data-icon="utensils"></span>
+              <div>
+                <div id="eaten-value" class="hero-stat-value">0</div>
+                <div class="hero-stat-label">Eaten</div>
+              </div>
+            </div>
+            <div class="hero-stat">
+              <span class="hero-stat-icon burned" data-icon="flame"></span>
+              <div>
+                <div id="burned-value" class="hero-stat-value">0</div>
+                <div class="hero-stat-label">Burned · Garmin</div>
+              </div>
+            </div>
+            <div class="hero-stat">
+              <span class="hero-stat-icon goal" data-icon="target"></span>
+              <div>
+                <div id="goal-value" class="hero-stat-value">0</div>
+                <div class="hero-stat-label">Budget</div>
+              </div>
+            </div>
+          </div>
+          <div id="calorie-goal-label" class="hero-foot"></div>
         </section>
 
         <section class="macro-row">
-          <div class="macro-tile">
-            <div class="macro-label">PROT</div>
-            <div class="macro-value"><span id="protein-value">0</span><span class="goal">/0</span></div>
-            <div class="progress-track small"><div id="protein-progress" class="progress-fill blue"></div></div>
+          <div class="macro-tile protein">
+            <div class="macro-label"><span class="macro-dot"></span>Protein</div>
+            <div class="macro-value"><span id="protein-value">0</span><span id="protein-goal" class="goal">/0g</span></div>
+            <div class="progress-track"><div id="protein-progress" class="progress-fill"></div></div>
+            <div id="protein-left" class="macro-left"></div>
           </div>
-          <div class="macro-tile">
-            <div class="macro-label">FAT</div>
-            <div class="macro-value"><span id="fat-value">0</span><span class="goal">/0</span></div>
-            <div class="progress-track small"><div id="fat-progress" class="progress-fill orange"></div></div>
+          <div class="macro-tile fat">
+            <div class="macro-label"><span class="macro-dot"></span>Fat</div>
+            <div class="macro-value"><span id="fat-value">0</span><span id="fat-goal" class="goal">/0g</span></div>
+            <div class="progress-track"><div id="fat-progress" class="progress-fill"></div></div>
+            <div id="fat-left" class="macro-left"></div>
           </div>
-          <div class="macro-tile">
-            <div class="macro-label">CARB</div>
-            <div class="macro-value"><span id="carb-value">0</span><span class="goal">/0</span></div>
-            <div class="progress-track small"><div id="carb-progress" class="progress-fill green"></div></div>
+          <div class="macro-tile carb">
+            <div class="macro-label"><span class="macro-dot"></span>Carbs</div>
+            <div class="macro-value"><span id="carb-value">0</span><span id="carb-goal" class="goal">/0g</span></div>
+            <div class="progress-track"><div id="carb-progress" class="progress-fill"></div></div>
+            <div id="carb-left" class="macro-left"></div>
           </div>
         </section>
+
+        <div class="section-head">
+          <h2>Meals</h2>
+          <button id="btn-repeat-yesterday" class="chip-btn" data-icon="repeat">Repeat yesterday</button>
+        </div>
 
         <section id="meal-list" class="meal-list"></section>
 
+        <section id="water-card" class="card water-card">
+          <div class="row-card">
+            <div class="row-icon water" data-icon="droplet"></div>
+            <div class="row-text">
+              <div class="row-title">Water</div>
+              <div class="row-sub"><span id="water-ml">0 ml</span> · <span id="water-percent">0% goal</span></div>
+            </div>
+            <div class="stepper">
+              <button id="btn-remove-water" class="step-btn" aria-label="Remove 250 ml" data-icon="minus"></button>
+              <button id="btn-add-water" class="step-btn accent" aria-label="Add 250 ml" data-icon="plus"></button>
+            </div>
+          </div>
+          <div class="progress-track water"><div id="water-progress" class="progress-fill"></div></div>
+        </section>
+
         <section id="garmin-card" class="card hidden">
-          <h2>Garmin</h2>
-          <div id="garmin-stats" class="stats-grid"></div>
-          <p id="garmin-sync-age" class="hint"></p>
+          <div class="card-head">
+            <span class="card-head-icon" data-icon="watch"></span>
+            <h2>Garmin</h2>
+            <span id="garmin-sync-age" class="hint"></span>
+          </div>
+          <div id="garmin-stats" class="stats-grid four"></div>
         </section>
-
-        <section id="water-card" class="card row-card">
-          <div class="row-icon">💧</div>
-          <div class="row-text">
-            <div class="row-title">Water</div>
-            <div id="water-percent" class="row-sub">0% goal</div>
-          </div>
-          <div id="water-ml" class="row-value">0 ml</div>
-          <button id="btn-remove-water" class="plus-btn minus" aria-label="Remove 250 ml">−</button>
-          <button id="btn-add-water" class="plus-btn" aria-label="Add 250 ml">+</button>
-        </section>
-
-        <button id="btn-open-measurements" class="card row-card as-button">
-          <div class="row-icon">📏</div>
-          <div class="row-text">
-            <div class="row-title">Measurements</div>
-            <div class="row-sub">Track progress, not vibes</div>
-          </div>
-          <div class="chevron">›</div>
-        </button>
-
-        <button id="btn-open-reports" class="card row-card as-button">
-          <div class="row-icon">📊</div>
-          <div class="row-text">
-            <div class="row-title">Reports</div>
-            <div class="row-sub">AI analysis & recommendations</div>
-          </div>
-          <div class="chevron">›</div>
-        </button>
 
         <section class="card">
           <div class="row-card">
-            <div class="row-icon">🏋️</div>
+            <div class="row-icon workouts" data-icon="activity"></div>
             <div class="row-text">
               <div class="row-title">Workouts</div>
               <div id="workouts-sub" class="row-sub">Connect Garmin to see workouts</div>
@@ -106,31 +146,62 @@
           </div>
           <ul id="workouts-list" class="plain-list workouts-list"></ul>
         </section>
+
+        <section class="card list-card">
+          <button id="btn-open-measurements" class="row-card as-button">
+            <div class="row-icon measure" data-icon="scale"></div>
+            <div class="row-text">
+              <div class="row-title">Measurements</div>
+              <div class="row-sub">Track progress, not vibes</div>
+            </div>
+            <span class="chevron" data-icon="chevron-right"></span>
+          </button>
+          <button id="btn-open-reports" class="row-card as-button">
+            <div class="row-icon reports" data-icon="chart"></div>
+            <div class="row-text">
+              <div class="row-title">Reports</div>
+              <div class="row-sub">AI analysis & recommendations</div>
+            </div>
+            <span class="chevron" data-icon="chevron-right"></span>
+          </button>
+        </section>
       </main>
 
       <footer id="logging-bar" class="logging-bar">
-        <div class="logging-meta">
-          <span id="logging-meal-label">Logging to Breakfast</span>
-          <span id="logging-spinner" class="spinner hidden"></span>
-        </div>
-        <form id="text-log-form" class="logging-row">
-          <input id="text-log-input" type="text" placeholder="Describe what you ate, or tap 🎤 on the keyboard to dictate" autocomplete="off" enterkeyhint="send" />
-          <input id="camera-input" type="file" accept="image/*" hidden />
-          <button type="button" id="btn-camera" class="round-btn" aria-label="Photo">📷</button>
-          <button type="submit" id="btn-send" class="round-btn" aria-label="Send">➤</button>
-        </form>
         <div id="logging-feedback" class="logging-feedback"></div>
+        <div class="composer">
+          <div class="logging-meta">
+            <span class="live-dot"></span>
+            <span id="logging-meal-label">Logging to Breakfast</span>
+            <span id="logging-spinner" class="spinner hidden"></span>
+          </div>
+          <form id="text-log-form" class="logging-row">
+            <input id="camera-input" type="file" accept="image/*" hidden />
+            <button type="button" id="btn-camera" class="round-btn ghost" aria-label="Photo" data-icon="camera"></button>
+            <input id="text-log-input" type="text" placeholder="What did you eat?" autocomplete="off" enterkeyhint="send" />
+            <button type="submit" id="btn-send" class="round-btn accent" aria-label="Send" data-icon="send"></button>
+          </form>
+        </div>
       </footer>
     </section>
 
     <!-- Settings screen -->
     <section id="screen-settings" class="screen hidden">
       <header class="topbar">
-        <button id="btn-back" class="icon-btn" aria-label="Back">←</button>
+        <button id="btn-back" class="icon-btn" aria-label="Back" data-icon="back"></button>
         <h1>Settings</h1>
-        <span></span>
+        <span class="topbar-spacer"></span>
       </header>
       <main class="content">
+        <section class="card form-card">
+          <h2>Appearance</h2>
+          <div class="segmented-control" role="radiogroup" aria-label="Theme">
+            <label><input type="radio" name="theme" value="auto" /><span>Auto</span></label>
+            <label><input type="radio" name="theme" value="light" /><span>Light</span></label>
+            <label><input type="radio" name="theme" value="dark" /><span>Dark</span></label>
+          </div>
+        </section>
+
         <section class="card form-card">
           <h2>Body profile</h2>
           <label>Age <input id="profile-age" type="number" step="1" /></label>
@@ -164,17 +235,17 @@
 
         <section class="card form-card">
           <h2>AI model</h2>
-          <div class="segmented">
-            <label><input type="radio" name="model" value="sonnet" /> Sonnet (recommended)</label>
-            <label><input type="radio" name="model" value="haiku" /> Haiku (cheaper)</label>
-            <label><input type="radio" name="model" value="glm" /> GLM 5.3 Flash (cheapest, via OpenRouter)</label>
+          <div class="choice-list">
+            <label><input type="radio" name="model" value="sonnet" /><span><b>Sonnet</b><small>Recommended · most accurate</small></span></label>
+            <label><input type="radio" name="model" value="haiku" /><span><b>Haiku</b><small>Cheaper · fast</small></span></label>
+            <label><input type="radio" name="model" value="glm" /><span><b>GLM 5.3 Flash</b><small>Cheapest · via OpenRouter</small></span></label>
           </div>
           <p class="hint">Модель используется для записи еды, оценки приёмов пищи и анализа. Какая модель ответила, видно в подтверждении и в оценке — удобно сравнивать.</p>
         </section>
 
         <section class="card form-card">
           <h2>Claude API key</h2>
-          <input id="api-key-input" type="password" placeholder="sk-ant-..." autocomplete="off" />
+          <input id="api-key-input" class="key-input" type="password" placeholder="sk-ant-..." autocomplete="off" />
           <button id="btn-save-key" class="primary-btn">Save</button>
           <p id="api-key-status" class="hint"></p>
           <p class="hint">Ключ хранится только в localStorage этого браузера на этом устройстве, никуда не отправляется, кроме api.anthropic.com.</p>
@@ -205,9 +276,9 @@
     <!-- Measurements screen -->
     <section id="screen-measurements" class="screen hidden">
       <header class="topbar">
-        <button class="icon-btn back-to-today" aria-label="Back">←</button>
+        <button class="icon-btn back-to-today" aria-label="Back" data-icon="back"></button>
         <h1>Measurements</h1>
-        <span></span>
+        <span class="topbar-spacer"></span>
       </header>
       <main class="content">
         <section class="card form-card">
@@ -218,11 +289,11 @@
           </form>
         </section>
         <section id="weight-chart-card" class="card hidden">
-          <h2>Trend</h2>
+          <h2 class="card-title">Trend</h2>
           <div id="weight-chart"></div>
         </section>
         <section class="card">
-          <h2>History</h2>
+          <h2 class="card-title">History</h2>
           <ul id="measurement-list" class="plain-list"></ul>
         </section>
       </main>
@@ -231,17 +302,17 @@
     <!-- Reports screen -->
     <section id="screen-reports" class="screen hidden">
       <header class="topbar">
-        <button class="icon-btn back-to-today" aria-label="Back">←</button>
+        <button class="icon-btn back-to-today" aria-label="Back" data-icon="back"></button>
         <h1>Reports</h1>
-        <span></span>
+        <span class="topbar-spacer"></span>
       </header>
       <main class="content">
         <section class="card">
-          <h2>Last 7 days</h2>
+          <h2 class="card-title">Last 7 days</h2>
           <div id="weekly-stats" class="stats-grid"></div>
         </section>
         <section class="card form-card">
-          <button id="btn-analyze" class="primary-btn">Analyze my nutrition</button>
+          <button id="btn-analyze" class="primary-btn accent" data-icon="sparkles">Analyze my nutrition</button>
           <p id="analyze-status" class="hint"></p>
         </section>
         <section id="report-card" class="card hidden">
@@ -252,29 +323,34 @@
     </section>
 
     <!-- Search sheet -->
-    <dialog id="search-dialog">
+    <dialog id="search-dialog" class="sheet">
+      <div class="grabber"></div>
       <div class="sheet-header">
         <h2>Search</h2>
-        <button id="btn-close-search" class="icon-btn">✕</button>
+        <button id="btn-close-search" class="icon-btn small" aria-label="Close" data-icon="x"></button>
       </div>
-      <input id="search-input" type="text" placeholder="Search previous foods..." />
+      <div class="search-field">
+        <span data-icon="search"></span>
+        <input id="search-input" type="text" placeholder="Search previous foods..." />
+      </div>
       <ul id="search-results" class="search-results"></ul>
     </dialog>
 
     <!-- Manual create / edit sheet -->
-    <dialog id="create-dialog">
+    <dialog id="create-dialog" class="sheet">
+      <div class="grabber"></div>
       <div class="sheet-header">
         <h2 id="create-dialog-title">Create</h2>
-        <button id="btn-close-create" class="icon-btn">✕</button>
+        <button id="btn-close-create" class="icon-btn small" aria-label="Close" data-icon="x"></button>
       </div>
       <form id="create-form">
-        <label>Name <input id="create-name" type="text" required /></label>
-        <label>Grams <input id="create-grams" type="number" step="any" /></label>
-        <label>Kcal <input id="create-kcal" type="number" step="any" required /></label>
-        <label>Protein (g) <input id="create-protein" type="number" step="any" /></label>
-        <label>Fat (g) <input id="create-fat" type="number" step="any" /></label>
-        <label>Carbs (g) <input id="create-carb" type="number" step="any" /></label>
-        <button type="submit" id="create-submit-btn" class="primary-btn">Add</button>
+        <label class="field full">Name <input id="create-name" type="text" required /></label>
+        <label class="field half">Grams <input id="create-grams" type="number" step="any" /></label>
+        <label class="field half">Kcal <input id="create-kcal" type="number" step="any" required /></label>
+        <label class="field third">Protein <input id="create-protein" type="number" step="any" /></label>
+        <label class="field third">Fat <input id="create-fat" type="number" step="any" /></label>
+        <label class="field third">Carbs <input id="create-carb" type="number" step="any" /></label>
+        <button type="submit" id="create-submit-btn" class="primary-btn full">Add</button>
       </form>
     </dialog>
 
