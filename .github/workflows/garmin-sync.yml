@@ -4,22 +4,29 @@ on:
   schedule:
     # Every 2 hours (UTC), timezone-agnostic. Fills in "today's" active calories through
     # the day so a workout shows up in the budget within ~2h (plus watch->Garmin lag),
-    # instead of only appearing the next morning. The commit step is a no-op when nothing
-    # changed, and GitHub Actions is free/unlimited on public repos. Scheduled runs can be
-    # delayed or occasionally skipped by GitHub under load — that's fine for this use.
+    # instead of only appearing the next morning. The sync script leaves the file untouched
+    # when the data didn't change, so quiet hours produce no commits. GitHub Actions is
+    # free/unlimited on public repos; scheduled runs can be delayed or occasionally skipped
+    # by GitHub under load — that's fine for this use.
     - cron: "0 */2 * * *"
   workflow_dispatch: {} # lets you trigger it manually from the Actions tab
 
 permissions:
   contents: write
 
+# A manual run overlapping a scheduled one would race on the same commit/push.
+concurrency:
+  group: garmin-sync
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # v5/v6 = the Node 24 releases (v4/v5 ran on the deprecated Node 20 runtime).
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -40,5 +47,12 @@ jobs:
           git config user.name "garmin-sync-bot"
           git config user.email "actions@users.noreply.github.com"
           git add data/garmin.json
-          git diff --cached --quiet || git commit -m "Sync Garmin data"
+          if git diff --cached --quiet; then
+            echo "No data changes to commit."
+            exit 0
+          fi
+          git commit -m "Sync Garmin data"
+          # If an app update was pushed while this run was fetching, a plain push is rejected
+          # as non-fast-forward and the run fails — rebase onto it first.
+          git pull --rebase origin main
           git push

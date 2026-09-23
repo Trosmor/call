@@ -50,7 +50,12 @@ export function computeGoals(profile) {
   else rate = 0;
 
   const dailyAdjustment = (rate * KCAL_PER_KG) / 7;
-  const calorieGoal = Math.round(maintenance + dailyAdjustment);
+  // Never target below BMR: with a sedentary multiplier even the default 0.5 kg/week loss
+  // pushed the goal under basal metabolism (e.g. 80 kg male: BMR 1780, goal 1586), which is
+  // an unsafe recommendation. Garmin active calories are still added on top in the app.
+  const rawGoal = Math.round(maintenance + dailyAdjustment);
+  const calorieGoal = Math.max(rawGoal, Math.round(bmrValue));
+  const clampedToBmr = calorieGoal > rawGoal;
 
   // Protein: ~2g/kg bodyweight (supports muscle retention in a deficit or growth in a surplus).
   const proteinGoalG = Math.round(weightKg * 2);
@@ -67,6 +72,7 @@ export function computeGoals(profile) {
     calorieGoal,
     proteinGoalG,
     fatGoalG,
-    carbGoalG
+    carbGoalG,
+    clampedToBmr
   };
 }

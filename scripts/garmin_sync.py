@@ -31,54 +31,55 @@ def safe_call(fn, *args, default=None):
         return default
 
 
+def as_dict(value) -> dict:
+    """Garmin endpoints return None / lists / dicts inconsistently; `.get` on anything but a
+    dict raised AttributeError OUTSIDE safe_call and aborted the whole sync run."""
+    return value if isinstance(value, dict) else {}
+
+
 def summarize_day(client, day: date) -> dict:
     d = day.isoformat()
     out = {"date": d}
 
-    stats = safe_call(client.get_stats, d, default={})
+    stats = as_dict(safe_call(client.get_stats, d))
     out["steps"] = stats.get("totalSteps")
     out["activeCalories"] = stats.get("activeKilocalories")
     out["totalCalories"] = stats.get("totalKilocalories")
     out["restingHeartRate"] = stats.get("restingHeartRate")
 
-    sleep = safe_call(client.get_sleep_data, d, default={})
-    daily_sleep = (sleep or {}).get("dailySleepDTO") or {}
-    sleep_seconds = daily_sleep.get("sleepTimeSeconds")
+    sleep = as_dict(safe_call(client.get_sleep_data, d))
+    sleep_seconds = as_dict(sleep.get("dailySleepDTO")).get("sleepTimeSeconds")
     out["sleepHours"] = round(sleep_seconds / 3600, 1) if sleep_seconds else None
-    out["sleepScore"] = ((sleep or {}).get("sleepScores") or {}).get("overall", {}).get("value")
+    out["sleepScore"] = as_dict(as_dict(sleep.get("sleepScores")).get("overall")).get("value")
 
-    hrv = safe_call(client.get_hrv_data, d, default={})
-    hrv_summary = (hrv or {}).get("hrvSummary") or {}
+    hrv_summary = as_dict(as_dict(safe_call(client.get_hrv_data, d)).get("hrvSummary"))
     out["hrvLastNightAvg"] = hrv_summary.get("lastNightAvg")
     out["hrvStatus"] = hrv_summary.get("status")
 
-    stress = safe_call(client.get_all_day_stress, d, default={})
-    out["avgStressLevel"] = (stress or {}).get("avgStressLevel")
+    out["avgStressLevel"] = as_dict(safe_call(client.get_all_day_stress, d)).get("avgStressLevel")
 
     battery = safe_call(client.get_body_battery, d, d, default=[])
-    if battery:
-        values = (battery[0] or {}).get("bodyBatteryValuesArray") or []
-        levels = [v[1] for v in values if isinstance(v, list) and len(v) > 1 and v[1] is not None]
-        out["bodyBatteryHigh"] = max(levels) if levels else None
-        out["bodyBatteryLow"] = min(levels) if levels else None
-    else:
-        out["bodyBatteryHigh"] = None
-        out["bodyBatteryLow"] = None
+    first = as_dict(battery[0]) if isinstance(battery, list) and battery else {}
+    values = first.get("bodyBatteryValuesArray") or []
+    levels = [v[1] for v in values if isinstance(v, list) and len(v) > 1 and v[1] is not None]
+    out["bodyBatteryHigh"] = max(levels) if levels else None
+    out["bodyBatteryLow"] = min(levels) if levels else None
 
-    body_comp = safe_call(client.get_body_composition, d, default={})
-    weight_g = (body_comp or {}).get("totalAverage", {}).get("weight")
+    body_comp = as_dict(safe_call(client.get_body_composition, d))
+    weight_g = as_dict(body_comp.get("totalAverage")).get("weight")
     out["weightKg"] = round(weight_g / 1000, 1) if weight_g else None
 
-    activities = safe_call(client.get_activities_by_date, d, d, default=[]) or []
+    activities = safe_call(client.get_activities_by_date, d, d, default=[])
     out["activities"] = [
         {
             "name": a.get("activityName"),
-            "type": (a.get("activityType") or {}).get("typeKey"),
+            "type": as_dict(a.get("activityType")).get("typeKey"),
             "durationMin": round((a.get("duration") or 0) / 60, 1),
             "calories": a.get("calories"),
             "avgHeartRate": a.get("averageHR"),
         }
-        for a in activities
+        for a in (activities if isinstance(activities, list) else [])
+        if isinstance(a, dict)
     ]
 
     return out
@@ -95,6 +96,18 @@ def main():
         day = today - timedelta(days=i)
         print(f"Fetching {day.isoformat()}...")
         days.append(summarize_day(client, day))
+
+    # Only rewrite the file when the data itself changed. Writing a fresh syncedAt on every
+    # run meant the "commit only if changed" step committed every 2 hours around the clock
+    # (≈550 commits in 2 months, each triggering a Pages rebuild). syncedAt now means "when
+    # the data last changed", which the app shows as the sync age.
+    try:
+        previous = json.loads(OUTPUT_PATH.read_text(encoding="utf-8")).get("days")
+    except (OSError, ValueError):
+        previous = None
+    if previous == days:
+        print("No changes in Garmin data - leaving data/garmin.json untouched.")
+        return
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(

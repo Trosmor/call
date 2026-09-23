@@ -10,6 +10,21 @@
   --green: #34c759;
   --red: #ff453a;
   --black: #1c1c1e;
+  /* Lets native controls (pickers, date/number inputs, dialogs) follow the theme too. */
+  color-scheme: light dark;
+}
+
+/*
+ * iOS Safari zooms the whole page into any focused field whose font-size is under 16px, and
+ * doesn't zoom back out — every tap into the log bar, Settings or the Edit sheet did that.
+ * Form controls also don't inherit color, which left typed text dark-on-dark in dark mode.
+ */
+input, select, textarea, button {
+  font-family: inherit;
+  color: var(--text);
+}
+input, select, textarea {
+  font-size: 16px !important;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -195,6 +210,7 @@ html, body {
 .btn-rate-meal {
   background: none; border: none; color: var(--text); font-weight: 600; font-size: 13px;
 }
+.btn-rate-meal:disabled { color: var(--muted); }
 
 .meal-body { padding: 0 16px 16px; display: none; }
 .meal-body.open { display: block; }
@@ -252,6 +268,13 @@ html, body {
   width: 28px; height: 28px; border-radius: 50%; border: none;
   background: var(--orange); color: white; font-size: 16px; line-height: 1;
 }
+.plus-btn.minus { background: rgba(128,128,128,0.25); color: var(--text); }
+#water-card .row-value { margin-left: auto; }
+
+.workouts-list:empty { display: none; }
+.workouts-list { margin-top: 8px; }
+
+.hint.warn { color: var(--orange); }
 
 .logging-bar {
   position: sticky;
@@ -285,7 +308,7 @@ html, body {
   border: none; font-size: 16px; flex-shrink: 0;
 }
 .logging-feedback { font-size: 11px; margin-top: 6px; min-height: 14px; }
-.logging-feedback.error { color: #ff453a; }
+.logging-feedback.error { color: var(--red); }
 .logging-feedback.success { color: var(--green); }
 
 .spinner {

@@ -4,7 +4,7 @@ import { computeGoals, ACTIVITY_LABELS, GOAL_LABELS } from "./calc.js";
 import { Garmin } from "./garmin.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-07-15.3";
+const APP_VERSION = "2026-09-23.1";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "☀️" },
@@ -19,7 +19,10 @@ const state = {
   openMeals: new Set(["breakfast"]),
   activeMealTypeForDialog: "breakfast",
   editingItemId: null, // non-null while create-dialog is repurposed for editing an existing item
-  dialogBase: null // original grams/kcal/macros snapshot, used to scale macros when grams changes
+  dialogBase: null, // original grams/kcal/macros snapshot, used to scale macros when grams changes
+  ratingInFlight: new Set(), // "YYYY-MM-DD:mealType" keys with a rating request pending
+  loggingBusy: false, // a photo/text logging request is in flight
+  searchResults: [] // items currently listed in the Search sheet, addressed by index
 };
 
 const el = (id) => document.getElementById(id);
@@ -112,11 +115,20 @@ function renderWeekSelector() {
   });
 }
 
+/** Active kcal from Garmin for a date key — added on top of the day's goal. */
+function garminActiveCalories(dateKey) {
+  return Math.round(Garmin.dayFor(dateKey)?.activeCalories || 0);
+}
+
+/** The day's effective calorie budget, exactly as the Today screen shows it. */
+function effectiveBudget(day, profile) {
+  return (day.calorieGoal || profile.dailyCalorieGoal) + garminActiveCalories(day.date);
+}
+
 function renderSummary(day, profile) {
   const totals = Storage.totals(day);
-  const garminDay = Garmin.dayFor(day.date);
-  const activeCalories = garminDay?.activeCalories || 0;
-  const goal = (day.calorieGoal || profile.dailyCalorieGoal) + activeCalories;
+  const activeCalories = garminActiveCalories(day.date);
+  const goal = effectiveBudget(day, profile);
   const left = goal - totals.kcal;
   const progress = goal > 0 ? Math.min(Math.max(totals.kcal / goal, 0), 1) : 0;
 
@@ -124,7 +136,7 @@ function renderSummary(day, profile) {
   el("left-value").textContent = left;
   el("calorie-progress").style.width = `${progress * 100}%`;
   el("calorie-goal-label").textContent = activeCalories
-    ? `${goal} kcal (${day.calorieGoal} + ${activeCalories} from Garmin)`
+    ? `${goal} kcal (${goal - activeCalories} + ${activeCalories} from Garmin)`
     : `${goal} kcal`;
 
   setMacro("protein", totals.protein, day.proteinGoalG);
@@ -152,6 +164,37 @@ function renderGarminCard(day) {
   ];
   el("garmin-stats").innerHTML = tiles
     .map(([label, value]) => `<div class="stat-tile"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`)
+    .join("");
+
+  // The sync runs unattended in GitHub Actions; if it breaks (e.g. the Garmin session token
+  // expires) the data silently freezes — surface its age so that's noticeable.
+  const hours = Garmin.hoursSinceSync();
+  const ageNode = el("garmin-sync-age");
+  if (hours === null) {
+    ageNode.textContent = "";
+    ageNode.className = "hint";
+  } else {
+    const age = hours < 1 ? "меньше часа назад" : hours < 48 ? `${Math.round(hours)} ч назад` : `${Math.round(hours / 24)} дн назад`;
+    ageNode.textContent = `Обновлено ${age}${hours > 24 ? " — синк Garmin, похоже, сломался, проверь GitHub Actions" : ""}`;
+    ageNode.className = hours > 24 ? "hint warn" : "hint";
+  }
+}
+
+/** Workouts for the selected day, straight from Garmin (their kcal are already in active calories). */
+function renderWorkouts(day) {
+  const activities = Garmin.dayFor(day.date)?.activities || [];
+  el("workouts-sub").textContent = activities.length
+    ? `${activities.length} from Garmin`
+    : Garmin.isAvailable() ? "No workouts this day" : "Connect Garmin to see workouts";
+  el("workouts-list").innerHTML = activities
+    .map((a) => {
+      const details = [
+        a.durationMin ? `${Math.round(a.durationMin)} min` : null,
+        a.calories ? `${Math.round(a.calories)} kcal` : null,
+        a.avgHeartRate ? `♥ ${Math.round(a.avgHeartRate)}` : null
+      ].filter(Boolean).join(" · ");
+      return `<li><span>${escapeHtml(a.name || a.type || "Workout")}</span><span class="hint">${details}</span></li>`;
+    })
     .join("");
 }
 
@@ -212,6 +255,10 @@ function renderMeals(day) {
       const yesterday = new Date(state.selectedDate);
       yesterday.setDate(yesterday.getDate() - 1);
       const copied = Storage.copyMealType(yesterday, state.selectedDate, mealType);
+      if (copied === -1) {
+        setLoggingFeedback(`${MEAL_META[mealType].label} уже скопирован со вчера.`, "error");
+        return;
+      }
       if (!copied) {
         setLoggingFeedback(`Вчера ${MEAL_META[mealType].label.toLowerCase()} не логировался.`, "error");
         return;
@@ -222,6 +269,7 @@ function renderMeals(day) {
   });
 
   container.querySelectorAll("[data-rate-meal]").forEach((btn) => {
+    btn.disabled = state.ratingInFlight.has(`${day.date}:${btn.dataset.rateMeal}`);
     btn.onclick = async (e) => {
       e.stopPropagation();
       await rateMeal(btn.dataset.rateMeal);
@@ -235,10 +283,19 @@ async function rateMeal(mealType) {
     setLoggingFeedback("Укажи Claude API-ключ в Настройках.", "error");
     return;
   }
-  const day = Storage.getDay(state.selectedDate);
+  // Capture the day and the exact items being rated BEFORE the request: the user may switch
+  // days or edit the meal while waiting, and the result must land where it was asked for,
+  // flagged stale if the meal changed in the meantime.
+  const date = new Date(state.selectedDate);
+  const day = Storage.getDay(date);
+  const flightKey = `${day.date}:${mealType}`;
+  if (state.ratingInFlight.has(flightKey)) return; // double tap = one paid request, not two
   const items = day.meals[mealType];
   if (!items.length) return;
+  const signature = Storage.mealItemsSignature(items);
 
+  state.ratingInFlight.add(flightKey);
+  renderMeals(day);
   setLoggingFeedback(`Оцениваю ${MEAL_META[mealType].label.toLowerCase()}...`, "");
   try {
     const model = ClaudeClient.modelIdFor(profile.preferredModel);
@@ -250,12 +307,15 @@ async function rateMeal(mealType) {
       fat_g: i.fatG,
       carb_g: i.carbG
     }));
-    const rating = await ClaudeClient.rateMeal(profile.apiKey, model, mealType, payloadItems, profile);
-    Storage.saveMealRating(state.selectedDate, mealType, rating);
+    const budget = effectiveBudget(day, profile);
+    const rating = await ClaudeClient.rateMeal(profile.apiKey, model, mealType, payloadItems, profile, budget);
+    Storage.saveMealRating(date, mealType, rating, signature);
     setLoggingFeedback(`${MEAL_META[mealType].label}: ${rating.score}/100`, "success");
-    renderAll();
   } catch (err) {
     setLoggingFeedback(err instanceof ClaudeAPIError ? err.message : `Ошибка: ${err.message}`, "error");
+  } finally {
+    state.ratingInFlight.delete(flightKey);
+    renderAll();
   }
 }
 
@@ -270,8 +330,10 @@ function mealCardHTML(day, type) {
   const items = day.meals[type];
   const kcal = Storage.mealTotalKcal(day, type);
   const isOpen = state.openMeals.has(type);
-  const rating = day.mealRatings && day.mealRatings[type];
+  // A rating of a meal whose items were all deleted is meaningless — treat it as absent.
+  const rating = items.length ? day.mealRatings && day.mealRatings[type] : null;
   const isStale = rating && rating.itemsSignature !== Storage.mealItemsSignature(items);
+  const ratingPending = state.ratingInFlight.has(`${day.date}:${type}`);
 
   const rows = items
     .map(
@@ -317,7 +379,7 @@ function mealCardHTML(day, type) {
           <button class="btn-repeat-meal" data-repeat-meal="${type}">↻ Repeat yesterday's ${meta.label.toLowerCase()}</button>
           ${
             items.length
-              ? `<button class="btn-rate-meal" data-rate-meal="${type}">${rating ? "⭐ Re-rate" : "⭐ Rate meal"}</button>`
+              ? `<button class="btn-rate-meal" data-rate-meal="${type}">${ratingPending ? "⏳ Rating…" : rating ? "⭐ Re-rate" : "⭐ Rate meal"}</button>`
               : ""
           }
         </div>
@@ -350,6 +412,7 @@ function renderAll() {
   renderGarminCard(day);
   renderMeals(day);
   renderWater(day);
+  renderWorkouts(day);
   renderLoggingMealLabel();
 }
 
@@ -367,13 +430,14 @@ function openSearchDialog(mealType) {
 
 function renderSearchResults(query) {
   const list = el("search-results");
-  const items = Storage.allFoodItemsHistory().filter((i) =>
-    query ? i.name.toLowerCase().includes(query.toLowerCase()) : true
-  );
-  list.innerHTML = items
-    .slice(0, 30)
+  // Items are addressed by index into state.searchResults — serializing them as JSON into an
+  // HTML attribute broke on names containing "&" sequences the parser treats as entities.
+  state.searchResults = Storage.allFoodItemsHistory()
+    .filter((i) => (query ? i.name.toLowerCase().includes(query.toLowerCase()) : true))
+    .slice(0, 30);
+  list.innerHTML = state.searchResults
     .map(
-      (item) => `<li data-add-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'>
+      (item, idx) => `<li data-result-index="${idx}">
         <span>${escapeHtml(item.name)} — ${Math.round(item.grams)}g, ${item.kcal} kcal</span>
         <span>+</span>
       </li>`
@@ -381,7 +445,8 @@ function renderSearchResults(query) {
     .join("");
   list.querySelectorAll("li").forEach((li) => {
     li.onclick = () => {
-      const item = JSON.parse(li.dataset.addItem);
+      const item = state.searchResults[Number(li.dataset.resultIndex)];
+      if (!item) return;
       Storage.addFoodItem(state.selectedDate, state.activeMealTypeForDialog, {
         ...item,
         source: "search"
@@ -448,7 +513,7 @@ el("create-form").addEventListener("submit", (e) => {
   const values = {
     name: el("create-name").value,
     grams: parseFloat(el("create-grams").value) || 0,
-    kcal: parseInt(el("create-kcal").value, 10) || 0,
+    kcal: Math.round(parseFloat(el("create-kcal").value)) || 0,
     proteinG: parseFloat(el("create-protein").value) || 0,
     fatG: parseFloat(el("create-fat").value) || 0,
     carbG: parseFloat(el("create-carb").value) || 0
@@ -477,6 +542,10 @@ el("btn-repeat-yesterday").onclick = () => {
     setLoggingFeedback("Вчера приёмов пищи не было.", "error");
     return;
   }
+  if (copied === -1) {
+    setLoggingFeedback("Вчерашний день уже скопирован.", "error");
+    return;
+  }
   setLoggingFeedback(`Скопировано ${copied} продукт(ов) со вчера.`, "success");
   renderAll();
 };
@@ -488,25 +557,34 @@ el("btn-add-water").onclick = () => {
   renderAll();
 };
 
-// ---------- navigation ----------
+// A mistaken "+" tap had no undo before — water could only ever go up.
+el("btn-remove-water").onclick = () => {
+  Storage.addWater(state.selectedDate, -250);
+  renderAll();
+};
 
-el("btn-settings").onclick = () => {
-  loadSettingsForm();
-  el("screen-today").classList.add("hidden");
-  el("screen-settings").classList.remove("hidden");
-};
-el("btn-back").onclick = () => {
-  el("screen-settings").classList.add("hidden");
-  el("screen-today").classList.remove("hidden");
-};
+// ---------- navigation ----------
 
 function showScreen(id) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.add("hidden"));
   el(id).classList.remove("hidden");
 }
 
+el("btn-settings").onclick = () => {
+  loadSettingsForm();
+  showScreen("screen-settings");
+};
+
+// Re-render on the way back: goals changed in Settings (or a new weigh-in) used to stay
+// invisible on the Today screen until some unrelated action triggered a render.
+function backToToday() {
+  showScreen("screen-today");
+  renderAll();
+}
+
+el("btn-back").onclick = backToToday;
 document.querySelectorAll(".back-to-today").forEach((btn) => {
-  btn.onclick = () => showScreen("screen-today");
+  btn.onclick = backToToday;
 });
 
 el("btn-open-measurements").onclick = () => {
@@ -535,7 +613,12 @@ function loadSettingsForm() {
   el("goal-fat").value = profile.fatGoalG;
   el("goal-carb").value = profile.carbGoalG;
   el("goal-water").value = profile.waterGoalMl;
-  document.querySelector(`input[name="model"][value="${profile.preferredModel}"]`).checked = true;
+  // Guarded: an unexpected value (e.g. from an old or hand-edited backup) used to throw here,
+  // which aborted the whole click handler and made Settings impossible to open.
+  const modelRadio =
+    document.querySelector(`input[name="model"][value="${profile.preferredModel}"]`) ||
+    document.querySelector('input[name="model"][value="sonnet"]');
+  modelRadio.checked = true;
   el("api-key-status").textContent = profile.apiKey ? "Key is set." : "No key set yet.";
 
   el("profile-age").value = profile.age ?? "";
@@ -580,7 +663,11 @@ el("btn-calc-goals").onclick = () => {
   el("goal-protein").value = goals.proteinGoalG;
   el("goal-fat").value = goals.fatGoalG;
   el("goal-carb").value = goals.carbGoalG;
-  el("calc-goals-status").textContent = `BMR ${goals.bmr} kcal · TDEE ${goals.tdee} kcal · Goal ${goals.calorieGoal} kcal`;
+  el("calc-goals-status").textContent =
+    `BMR ${goals.bmr} kcal · TDEE ${goals.tdee} kcal · Goal ${goals.calorieGoal} kcal` +
+    (goals.clampedToBmr
+      ? " — цель поднята до BMR: такой темп похудения без тренировок небезопасен. Калории с часов Garmin добавятся к ней сверху."
+      : "");
 };
 
 ["goal-kcal", "goal-protein", "goal-fat", "goal-carb", "goal-water"].forEach((id) => {
@@ -611,18 +698,34 @@ el("btn-save-key").onclick = () => {
 
 // ---------- backup ----------
 
-el("btn-export-backup").onclick = () => {
+el("btn-export-backup").onclick = async () => {
   const json = Storage.exportBackup();
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
+  const filename = `colorize-backup-${Storage.dateKey(new Date())}.json`;
+  const file = new File([json], filename, { type: "application/json" });
+
+  // On iOS (especially the installed home-screen app) a blob download is unreliable; the
+  // share sheet offers "Save to Files" and works everywhere it's supported.
+  const isTouchDevice = navigator.maxTouchPoints > 0;
+  if (isTouchDevice && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: filename });
+      el("backup-status").textContent = "Backup saved.";
+      return;
+    } catch (err) {
+      if (err.name === "AbortError") return; // user closed the share sheet
+      // any other share failure: fall back to a plain download below
+    }
+  }
+
+  const url = URL.createObjectURL(file);
   const a = document.createElement("a");
-  const stamp = new Date().toISOString().slice(0, 10);
   a.href = url;
-  a.download = `colorize-backup-${stamp}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  // Revoking synchronously right after click() can cancel the download in Safari.
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
   el("backup-status").textContent = "Backup downloaded.";
 };
 
@@ -652,6 +755,7 @@ el("import-backup-input").addEventListener("change", async (e) => {
 // ---------- logging: text / photo -> Claude ----------
 
 function setLoggingBusy(busy) {
+  state.loggingBusy = busy;
   el("logging-spinner").classList.toggle("hidden", !busy);
   el("btn-camera").disabled = busy;
   el("btn-send").disabled = busy;
@@ -663,103 +767,139 @@ function setLoggingFeedback(message, kind) {
   node.className = "logging-feedback" + (kind ? ` ${kind}` : "");
 }
 
-/** Finds the logged item Claude meant by target_name, preferring target_meal_type when given. */
+/** Model output → a valid meal type, or null. ("Lunch", "обед" etc. used to crash the feedback.) */
+function normalizeMealType(value) {
+  const v = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return Storage.MEAL_TYPES.includes(v) ? v : null;
+}
+
+/**
+ * Finds the logged item Claude meant by target_name. Searches the meal it named first, then
+ * every meal — the model occasionally names the wrong meal for an item it clearly means.
+ */
 function findLoggedItem(day, targetName, targetMealType) {
-  if (!targetName) return null;
-  const needle = targetName.trim().toLowerCase();
-  const mealsToSearch = targetMealType ? [targetMealType] : Storage.MEAL_TYPES;
-  for (const mealType of mealsToSearch) {
-    const items = day.meals[mealType] || [];
-    const exact = items.find((i) => i.name.toLowerCase() === needle);
-    if (exact) return { mealType, item: exact };
-  }
-  for (const mealType of mealsToSearch) {
-    const items = day.meals[mealType] || [];
-    const partial = items.find(
-      (i) => i.name.toLowerCase().includes(needle) || needle.includes(i.name.toLowerCase())
-    );
-    if (partial) return { mealType, item: partial };
+  const needle = String(targetName || "").trim().toLowerCase();
+  if (!needle) return null;
+  const preferred = normalizeMealType(targetMealType);
+  const passes = preferred ? [[preferred], Storage.MEAL_TYPES] : [Storage.MEAL_TYPES];
+  for (const meals of passes) {
+    for (const mealType of meals) {
+      const exact = day.meals[mealType].find((i) => (i.name || "").toLowerCase() === needle);
+      if (exact) return { mealType, item: exact };
+    }
+    for (const mealType of meals) {
+      const partial = day.meals[mealType].find((i) => {
+        const name = (i.name || "").toLowerCase();
+        return name && (name.includes(needle) || needle.includes(name));
+      });
+      if (partial) return { mealType, item: partial };
+    }
   }
   return null;
 }
 
-async function applyClaudeResponse(response, thumbnailSource) {
-  if (response.is_water && response.water_ml) {
-    Storage.addWater(state.selectedDate, response.water_ml);
-    setLoggingFeedback(`Added ${response.water_ml} ml of water`, "success");
-    renderAll();
-    return;
-  }
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
-  const day = Storage.getDay(state.selectedDate);
+/**
+ * Where a log should land, captured at SUBMIT time. A request takes several seconds; if the
+ * user switched days or opened another meal card meanwhile, the food used to follow the
+ * current screen instead of going where it was sent from.
+ */
+function captureLoggingContext(source) {
+  return { date: new Date(state.selectedDate), defaultMealType: resolveDefaultMealType(), source };
+}
 
-  if (response.action === "edit" || response.action === "delete") {
-    const match = findLoggedItem(day, response.target_name, response.target_meal_type);
+function applyClaudeResponse(response, ctx) {
+  const { date, source } = ctx;
+  const messages = [];
+  const action = source === "photo" ? "add" : response.action; // a photo can only add food
+
+  if (action === "edit" || action === "delete") {
+    const match = findLoggedItem(Storage.getDay(date), response.target_name, response.target_meal_type);
     if (!match) {
-      setLoggingFeedback(`Не нашёл "${response.target_name}" среди уже залогированного сегодня.`, "error");
+      setLoggingFeedback(`Не нашёл "${response.target_name}" среди залогированного за этот день.`, "error");
       return;
     }
-    if (response.action === "delete") {
-      Storage.deleteFoodItem(state.selectedDate, match.mealType, match.item.id);
-      setLoggingFeedback(`Удалено: ${match.item.name} из ${MEAL_META[match.mealType].label}.`, "success");
+    const mealLabel = MEAL_META[match.mealType].label;
+    if (action === "delete") {
+      Storage.deleteFoodItem(date, match.mealType, match.item.id);
+      messages.push(`Удалено: ${match.item.name} из ${mealLabel}`);
     } else {
       const updated = response.items?.[0];
       if (!updated) {
         setLoggingFeedback("Claude не прислал новые значения для изменения.", "error");
         return;
       }
-      Storage.editFoodItem(state.selectedDate, match.mealType, match.item.id, {
+      // Anything the model left out keeps its current value instead of being zeroed.
+      const keep = (v, current) => (v === null || v === undefined || v === "" ? current : v);
+      const values = {
         name: updated.name || match.item.name,
-        grams: updated.grams,
-        kcal: updated.kcal,
-        proteinG: updated.protein_g,
-        fatG: updated.fat_g,
-        carbG: updated.carb_g
-      });
-      setLoggingFeedback(
-        `Изменено: ${updated.name || match.item.name} → ${Math.round(updated.grams)}g, ${updated.kcal} kcal (${MEAL_META[match.mealType].label}).`,
-        "success"
-      );
+        grams: keep(updated.grams, match.item.grams),
+        kcal: keep(updated.kcal, match.item.kcal),
+        proteinG: keep(updated.protein_g, match.item.proteinG),
+        fatG: keep(updated.fat_g, match.item.fatG),
+        carbG: keep(updated.carb_g, match.item.carbG)
+      };
+      Storage.editFoodItem(date, match.mealType, match.item.id, values);
+      messages.push(`Изменено: ${values.name} → ${Math.round(num(values.grams))}g, ${Math.round(num(values.kcal))} kcal (${mealLabel})`);
     }
-    renderAll();
-    return;
+  } else {
+    const items = Array.isArray(response.items) ? response.items : [];
+    if (items.length) {
+      const mealType = normalizeMealType(response.meal_type) || ctx.defaultMealType;
+      const summaries = items.map((item) => {
+        Storage.addFoodItem(date, mealType, {
+          name: item.name,
+          grams: item.grams,
+          kcal: item.kcal,
+          proteinG: item.protein_g,
+          fatG: item.fat_g,
+          carbG: item.carb_g,
+          source
+        });
+        return `${item.name} ${Math.round(num(item.grams))}g, ${Math.round(num(item.kcal))} kcal`;
+      });
+      messages.push(`Added to ${MEAL_META[mealType].label}: ${summaries.join("; ")}`);
+    }
   }
 
-  const mealType = response.meal_type || resolveDefaultMealType();
-  const summaries = [];
-  for (const item of response.items || []) {
-    Storage.addFoodItem(state.selectedDate, mealType, {
-      name: item.name,
-      grams: item.grams,
-      kcal: item.kcal,
-      proteinG: item.protein_g,
-      fatG: item.fat_g,
-      carbG: item.carb_g,
-      source: thumbnailSource
-    });
-    summaries.push(`${item.name} ${Math.round(item.grams)}g, ${item.kcal} kcal`);
+  // Water is independent of the food action, so "съел яблоко и выпил стакан воды" logs both
+  // (it used to return early on water and silently drop the food).
+  const waterMl = Math.round(num(response.water_ml));
+  if (response.is_water && waterMl > 0) {
+    Storage.addWater(date, waterMl);
+    messages.push(`+${waterMl} ml water`);
   }
-  setLoggingFeedback(
-    summaries.length ? `Added to ${MEAL_META[mealType].label}: ${summaries.join("; ")}` : "",
-    "success"
-  );
+
+  if (!messages.length) {
+    setLoggingFeedback(
+      source === "photo" ? "Не удалось распознать еду на фото." : "Не нашёл в сообщении еды или воды — опиши подробнее.",
+      "error"
+    );
+    return;
+  }
+  const otherDay = Storage.dateKey(date) !== Storage.dateKey(state.selectedDate);
+  setLoggingFeedback(messages.join(" · ") + (otherDay ? ` (за ${date.toLocaleDateString()})` : ""), "success");
   renderAll();
 }
 
-async function runClaudeRequest(fn, thumbnailSource) {
+/** Returns true on success, so the caller can restore the user's input on failure. */
+async function runClaudeRequest(fn, ctx) {
   const profile = Storage.getProfile();
   if (!profile.apiKey) {
     setLoggingFeedback("Укажи Claude API-ключ в Настройках.", "error");
-    return;
+    return false;
   }
   setLoggingBusy(true);
   setLoggingFeedback("");
   try {
     const model = ClaudeClient.modelIdFor(profile.preferredModel);
     const response = await fn(profile.apiKey, model);
-    await applyClaudeResponse(response, thumbnailSource);
+    applyClaudeResponse(response, ctx);
+    return true;
   } catch (err) {
     setLoggingFeedback(err instanceof ClaudeAPIError ? err.message : `Ошибка: ${err.message}`, "error");
+    return false;
   } finally {
     setLoggingBusy(false);
   }
@@ -767,11 +907,12 @@ async function runClaudeRequest(fn, thumbnailSource) {
 
 el("text-log-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (state.loggingBusy) return;
   const input = el("text-log-input");
   const text = input.value.trim();
   if (!text) return;
-  input.value = "";
-  const day = Storage.getDay(state.selectedDate);
+  const ctx = captureLoggingContext("voice");
+  const day = Storage.getDay(ctx.date);
   const alreadyLoggedByMeal = {};
   for (const mealType of Storage.MEAL_TYPES) {
     alreadyLoggedByMeal[mealType] = day.meals[mealType].map((i) => ({
@@ -780,10 +921,13 @@ el("text-log-form").addEventListener("submit", async (e) => {
       kcal: i.kcal
     }));
   }
-  await runClaudeRequest(
+  input.value = "";
+  const ok = await runClaudeRequest(
     (apiKey, model) => ClaudeClient.analyzeFoodText(apiKey, model, text, alreadyLoggedByMeal),
-    "voice"
+    ctx
   );
+  // Give the text back on failure — a long dictation shouldn't have to be repeated.
+  if (!ok && !input.value) input.value = text;
 });
 
 el("btn-camera").onclick = () => el("camera-input").click();
@@ -791,9 +935,17 @@ el("btn-camera").onclick = () => el("camera-input").click();
 el("camera-input").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   e.target.value = "";
-  if (!file) return;
-  const base64 = await resizeImageToBase64(file);
-  await runClaudeRequest((apiKey, model) => ClaudeClient.analyzeFoodPhoto(apiKey, model, base64), "photo");
+  if (!file || state.loggingBusy) return;
+  const ctx = captureLoggingContext("photo");
+  let base64;
+  try {
+    base64 = await resizeImageToBase64(file);
+  } catch (err) {
+    // Used to be an unhandled rejection: nothing happened and nothing was shown.
+    setLoggingFeedback("Не удалось прочитать фото — попробуй другое.", "error");
+    return;
+  }
+  await runClaudeRequest((apiKey, model) => ClaudeClient.analyzeFoodPhoto(apiKey, model, base64), ctx);
 });
 
 /** Downscale to ~1024px and JPEG-compress before sending, to keep vision token cost low. */
@@ -861,7 +1013,7 @@ function renderMeasurements() {
     .map(
       (m) => `<li>
         <span>${new Date(m.date).toLocaleDateString()}</span>
-        <span>${m.weightKg.toFixed(1)} kg</span>
+        <span>${num(m.weightKg).toFixed(1)} kg</span>
         <button data-delete-measurement="${m.id}">✕</button>
       </li>`
     )
@@ -888,7 +1040,7 @@ el("measurement-form").addEventListener("submit", (e) => {
 // ---------- reports ----------
 
 function renderReportsScreen() {
-  const stats = Storage.weeklyStats(state.selectedDate, 7);
+  const stats = Storage.weeklyStats(state.selectedDate, 7, garminActiveCalories);
   const grid = el("weekly-stats");
   const tiles = [
     ["Avg calories", stats.daysLogged ? stats.avgKcal : "—"],
@@ -920,8 +1072,8 @@ function renderMarkdown(text) {
   let html = "";
   let inList = false;
   for (const line of lines) {
-    const heading = line.match(/^##+\s+(.*)/);
-    const bullet = line.match(/^[-*]\s+(.*)/);
+    const heading = line.match(/^\s*#{1,6}\s+(.*)/);
+    const bullet = line.match(/^\s*[-*•]\s+(.*)/);
     if (heading) {
       if (inList) { html += "</ul>"; inList = false; }
       html += `<h2>${inlineMarkdown(heading[1])}</h2>`;
@@ -940,7 +1092,11 @@ function renderMarkdown(text) {
 }
 
 function inlineMarkdown(str) {
-  return str.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  // Bold first, then single-asterisk italics — the app's own "*(Ответ обрезан…)*" note
+  // and the model's emphasis used to show up as literal asterisks.
+  return str
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*(?!\s)([^*]+?)\*(?!\*)/g, "$1<em>$2</em>");
 }
 
 el("btn-analyze").onclick = async () => {

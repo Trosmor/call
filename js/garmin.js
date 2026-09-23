@@ -32,11 +32,27 @@ export const Garmin = {
    * Resolves to true if the data actually changed.
    */
   async refresh() {
-    const before = cache ? cache.syncedAt : null;
-    cache = null;
-    loadPromise = null;
-    const data = await load();
-    return !!data && data.syncedAt !== before;
+    // Keep serving the current data while re-fetching: clearing the cache up front made the
+    // Garmin card and the active-calorie bonus vanish mid-refresh, and for good if the fetch
+    // failed (offline, flaky network on resume).
+    try {
+      const res = await fetch("data/garmin.json", { cache: "no-store" });
+      if (!res.ok) return false;
+      const data = await res.json();
+      const changed = !cache || data.syncedAt !== cache.syncedAt;
+      cache = data;
+      loadPromise = Promise.resolve(data);
+      return changed;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  /** Hours since the sync workflow last wrote new data, or null if unknown. */
+  hoursSinceSync() {
+    if (!cache || !cache.syncedAt) return null;
+    const t = Date.parse(cache.syncedAt);
+    return Number.isNaN(t) ? null : (Date.now() - t) / 3600000;
   },
 
   /** Synchronous lookup — call after preload() has resolved. Returns null if unavailable. */

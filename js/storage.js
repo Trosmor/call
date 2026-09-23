@@ -52,6 +52,21 @@ function mealItemsSignature(items) {
   return items.map((i) => `${i.name}:${Math.round(i.grams)}:${i.kcal}`).sort().join("|");
 }
 
+/**
+ * Appends fresh copies of `source` items to `target`, unless every source item is already
+ * in `target` (same name/grams/kcal) — that means this exact meal was already copied.
+ */
+function copyItemsInto(source, target) {
+  if (!source.length) return 0;
+  const itemKey = (i) => `${i.name}:${Math.round(toNum(i.grams))}:${Math.round(toNum(i.kcal))}`;
+  const present = new Set(target.map(itemKey));
+  if (source.every((i) => present.has(itemKey(i)))) return 0;
+  for (const item of source) {
+    target.push({ ...item, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
+  }
+  return source.length;
+}
+
 function loadRoot() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
@@ -71,11 +86,33 @@ function saveRoot(root) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(root));
 }
 
+/**
+ * Coerces a numeric field to a finite number. Model output occasionally carries null or a
+ * missing field (e.g. grams for "binge day, 4000 kcal"), and one NaN poisons every total
+ * on the screen ("Eaten: NaN") — so every stored or summed number goes through here.
+ */
+function toNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Parses a date for storage lookups. A bare "YYYY-MM-DD" string is read as LOCAL midnight —
+ * `new Date("2026-07-11")` would be UTC midnight, i.e. the previous day west of UTC.
+ */
+function toDate(date) {
+  if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const [y, m, d] = date.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return new Date(date);
+}
+
 function dateKey(date) {
   // Build the key from LOCAL date components. toISOString() converts to UTC first, which
   // shifts the calendar day for any positive UTC offset (e.g. UTC+3) — "today" at local
   // midnight becomes "yesterday" in UTC, silently filing entries under the wrong date.
-  const d = new Date(date);
+  const d = toDate(date);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -142,12 +179,12 @@ export const Storage = {
     if (!MEAL_TYPES.includes(mealType)) mealType = "snack";
     day.meals[mealType].push({
       id: crypto.randomUUID(),
-      name: item.name,
-      grams: item.grams,
-      kcal: Math.round(item.kcal),
-      proteinG: item.proteinG,
-      fatG: item.fatG,
-      carbG: item.carbG,
+      name: String(item.name || "Без названия").trim(),
+      grams: toNum(item.grams),
+      kcal: Math.round(toNum(item.kcal)),
+      proteinG: toNum(item.proteinG),
+      fatG: toNum(item.fatG),
+      carbG: toNum(item.carbG),
       source: item.source || "manual",
       createdAt: new Date().toISOString()
     });
@@ -171,67 +208,64 @@ export const Storage = {
     if (!day) return;
     const item = day.meals[mealType].find((i) => i.id === itemId);
     if (!item) return;
-    item.name = updates.name;
-    item.grams = updates.grams;
-    item.kcal = Math.round(updates.kcal);
-    item.proteinG = updates.proteinG;
-    item.fatG = updates.fatG;
-    item.carbG = updates.carbG;
+    item.name = String(updates.name || item.name).trim();
+    item.grams = toNum(updates.grams);
+    item.kcal = Math.round(toNum(updates.kcal));
+    item.proteinG = toNum(updates.proteinG);
+    item.fatG = toNum(updates.fatG);
+    item.carbG = toNum(updates.carbG);
     saveRoot(root);
   },
 
-  /** Copies every meal item from one day into another, e.g. "repeat yesterday". */
+  /**
+   * Copies every meal item from one day into another, e.g. "repeat yesterday".
+   * Returns null if the source day doesn't exist, 0 if it has no food, -1 if everything was
+   * already copied, otherwise the number of items copied. A meal whose items are all already
+   * present in the target is skipped, so an accidental double tap doesn't duplicate the whole
+   * day (water likewise only copies into a day with no water logged yet).
+   */
   copyMeals(fromDate, toDate) {
     const root = loadRoot();
-    const fromKey = dateKey(fromDate);
-    const toKey = dateKey(toDate);
-    const fromDay = root.days[fromKey];
+    const fromDay = root.days[dateKey(fromDate)];
     if (!fromDay) return null;
+    const sourceTotal = MEAL_TYPES.reduce((n, t) => n + fromDay.meals[t].length, 0);
+    if (!sourceTotal) return 0;
+    const toKey = dateKey(toDate);
     if (!root.days[toKey]) root.days[toKey] = emptyDay(toKey, root.profile);
     const toDay = root.days[toKey];
 
     let copiedCount = 0;
     for (const mealType of MEAL_TYPES) {
-      for (const item of fromDay.meals[mealType]) {
-        toDay.meals[mealType].push({
-          ...item,
-          id: crypto.randomUUID(),
-          createdAt: new Date().toISOString()
-        });
-        copiedCount++;
-      }
+      copiedCount += copyItemsInto(fromDay.meals[mealType], toDay.meals[mealType]);
     }
-    toDay.waterLoggedMl += fromDay.waterLoggedMl;
+    if (!copiedCount) return -1;
+    if (!toDay.waterLoggedMl && fromDay.waterLoggedMl) {
+      toDay.waterLoggedMl = fromDay.waterLoggedMl;
+    }
     saveRoot(root);
     return copiedCount;
   },
 
-  /** Copies just one meal type from one day into another, e.g. "repeat yesterday's breakfast". */
+  /**
+   * Copies just one meal type from one day into another, e.g. "repeat yesterday's breakfast".
+   * Returns the number copied; -1 means the meal was already copied (double-tap guard).
+   */
   copyMealType(fromDate, toDate, mealType) {
     const root = loadRoot();
-    const fromKey = dateKey(fromDate);
-    const toKey = dateKey(toDate);
-    const fromDay = root.days[fromKey];
+    const fromDay = root.days[dateKey(fromDate)];
     if (!fromDay || !fromDay.meals[mealType].length) return 0;
+    const toKey = dateKey(toDate);
     if (!root.days[toKey]) root.days[toKey] = emptyDay(toKey, root.profile);
-    const toDay = root.days[toKey];
-
-    for (const item of fromDay.meals[mealType]) {
-      toDay.meals[mealType].push({
-        ...item,
-        id: crypto.randomUUID(),
-        createdAt: new Date().toISOString()
-      });
-    }
+    const copied = copyItemsInto(fromDay.meals[mealType], root.days[toKey].meals[mealType]);
     saveRoot(root);
-    return fromDay.meals[mealType].length;
+    return copied || -1;
   },
 
   addWater(date, ml) {
     const root = loadRoot();
     const key = dateKey(date);
     if (!root.days[key]) root.days[key] = emptyDay(key, root.profile);
-    root.days[key].waterLoggedMl += ml;
+    root.days[key].waterLoggedMl = Math.max(0, toNum(root.days[key].waterLoggedMl) + toNum(ml));
     saveRoot(root);
     return root.days[key];
   },
@@ -261,17 +295,17 @@ export const Storage = {
     let kcal = 0, protein = 0, fat = 0, carb = 0;
     for (const mealType of MEAL_TYPES) {
       for (const item of day.meals[mealType]) {
-        kcal += item.kcal;
-        protein += item.proteinG;
-        fat += item.fatG;
-        carb += item.carbG;
+        kcal += toNum(item.kcal);
+        protein += toNum(item.proteinG);
+        fat += toNum(item.fatG);
+        carb += toNum(item.carbG);
       }
     }
-    return { kcal, protein: Math.round(protein), fat: Math.round(fat), carb: Math.round(carb) };
+    return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carb: Math.round(carb) };
   },
 
   mealTotalKcal(day, mealType) {
-    return day.meals[mealType].reduce((sum, i) => sum + i.kcal, 0);
+    return Math.round(day.meals[mealType].reduce((sum, i) => sum + toNum(i.kcal), 0));
   },
 
   // ---------- meal ratings ----------
@@ -280,7 +314,12 @@ export const Storage = {
     return mealItemsSignature(items);
   },
 
-  saveMealRating(date, mealType, rating) {
+  /**
+   * `itemsSignature` must be the signature of the items that were actually SENT for rating,
+   * captured before the request: computing it at save time would mark the rating as current
+   * even if the meal was edited while the request was in flight.
+   */
+  saveMealRating(date, mealType, rating, itemsSignature) {
     const root = loadRoot();
     const key = dateKey(date);
     const day = root.days[key];
@@ -289,7 +328,7 @@ export const Storage = {
     day.mealRatings[mealType] = {
       score: rating.score,
       comment: rating.comment,
-      itemsSignature: mealItemsSignature(day.meals[mealType]),
+      itemsSignature,
       ratedAt: new Date().toISOString()
     };
     saveRoot(root);
@@ -299,7 +338,7 @@ export const Storage = {
 
   addMeasurement(weightKg, note = "", date = new Date()) {
     const root = loadRoot();
-    const entry = { id: crypto.randomUUID(), date: new Date(date).toISOString(), weightKg, note };
+    const entry = { id: crypto.randomUUID(), date: toDate(date).toISOString(), weightKg: toNum(weightKg), note };
     root.measurements.push(entry);
     root.measurements.sort((a, b) => new Date(a.date) - new Date(b.date));
     // Keep the profile's weight in sync so BMR/TDEE always uses the latest reading.
@@ -311,7 +350,13 @@ export const Storage = {
 
   deleteMeasurement(id) {
     const root = loadRoot();
+    const wasLatest = root.measurements.length && root.measurements[root.measurements.length - 1].id === id;
     root.measurements = root.measurements.filter((m) => m.id !== id);
+    // Deleting a mistyped latest weigh-in must not leave that wrong weight in the profile
+    // (it feeds BMR/TDEE) — fall back to the new latest reading.
+    if (wasLatest && root.measurements.length) {
+      root.profile.weightKg = root.measurements[root.measurements.length - 1].weightKg;
+    }
     saveRoot(root);
   },
 
@@ -338,8 +383,12 @@ export const Storage = {
 
   // ---------- reports ----------
 
-  /** Local, no-AI weekly summary — always available, costs nothing. */
-  weeklyStats(referenceDate = new Date(), numDays = 7) {
+  /**
+   * Local, no-AI weekly summary — always available, costs nothing. `budgetBonusFor(dateKey)`
+   * returns extra kcal the app adds to that day's budget (Garmin active calories), so
+   * "days on target" is judged against the same budget the Today screen shows.
+   */
+  weeklyStats(referenceDate = new Date(), numDays = 7, budgetBonusFor = () => 0) {
     const root = loadRoot();
     const days = [];
     for (let i = 0; i < numDays; i++) {
@@ -362,8 +411,9 @@ export const Storage = {
       proteinSum += t.protein;
       fatSum += t.fat;
       carbSum += t.carb;
-      waterSum += day.waterLoggedMl;
-      if (day.calorieGoal > 0 && Math.abs(t.kcal - day.calorieGoal) <= day.calorieGoal * 0.1) onTarget++;
+      waterSum += toNum(day.waterLoggedMl);
+      const budget = toNum(day.calorieGoal) + toNum(budgetBonusFor(day.date));
+      if (budget > 0 && Math.abs(t.kcal - budget) <= budget * 0.1) onTarget++;
     }
     const n = days.length;
     return {

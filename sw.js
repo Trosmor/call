@@ -4,7 +4,7 @@
 // Network-first serves the freshest files whenever online and only falls back to
 // the cache when the network is unreachable, which is the right trade-off for a
 // personal app that is usually online.
-const CACHE_NAME = "colorize-shell-v9";
+const CACHE_NAME = "colorize-shell-v10";
 const SHELL_FILES = [
   "./",
   "./index.html",
@@ -18,7 +18,13 @@ const SHELL_FILES = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_FILES)));
+  // cache: "reload" — precache straight from the server, not from the browser's HTTP cache
+  // (GitHub Pages sends max-age=600, so a fresh SW could otherwise precache old files).
+  event.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(SHELL_FILES.map((url) => new Request(url, { cache: "reload" }))))
+  );
   self.skipWaiting();
 });
 
@@ -42,9 +48,22 @@ self.addEventListener("fetch", (event) => {
   if (event.request.url.includes("api.anthropic.com")) return;
   if (event.request.method !== "GET") return;
 
-  const networkPromise = fetch(event.request).then((response) => {
+  // "no-cache" = always revalidate with the server (cheap 304 when unchanged). Plain fetch()
+  // here was answered from the HTTP cache for up to 10 minutes after a deploy, which is part
+  // of why updates seemed to take forever to reach the phone.
+  const sameOrigin = new URL(event.request.url).origin === self.location.origin;
+  let networkRequest = event.request;
+  if (sameOrigin) {
+    try {
+      networkRequest = new Request(event.request, { cache: "no-cache" });
+    } catch (e) {
+      // Older WebKit rejects re-wrapping navigation requests; the plain request still works.
+    }
+  }
+
+  const networkPromise = fetch(networkRequest).then((response) => {
     // Keep the cache fresh so the offline fallback is as recent as possible.
-    if (response.ok && new URL(event.request.url).origin === self.location.origin) {
+    if (response.ok && sameOrigin) {
       const copy = response.clone();
       caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
     }
