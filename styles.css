@@ -657,6 +657,14 @@ svg.icon { width: 20px; height: 20px; flex-shrink: 0; display: block; }
   color: #fff;
   box-shadow: 0 4px 14px rgba(255, 79, 109, 0.4);
 }
+.round-btn.accent.listening {
+  background: linear-gradient(135deg, #ff6b6b, #e5243b);
+  animation: listening-pulse 1.4s ease-out infinite;
+}
+@keyframes listening-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(229, 36, 59, 0.55); }
+  100% { box-shadow: 0 0 0 14px rgba(229, 36, 59, 0); }
+}
 .logging-feedback {
   font-size: 13px;
   line-height: 1.4;

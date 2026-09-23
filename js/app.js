@@ -5,7 +5,7 @@ import { Garmin } from "./garmin.js";
 import { icon, hydrateIcons } from "./icons.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-09-23.4";
+const APP_VERSION = "2026-09-23.5";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "sun" },
@@ -1097,13 +1097,99 @@ el("text-log-form").addEventListener("submit", async (e) => {
       kcal: i.kcal
     }));
   }
+  if (recognition) recognition.abort();
   input.value = "";
+  updateSendButton();
   const ok = await runClaudeRequest(
     (route) => ClaudeClient.analyzeFoodText(route, text, alreadyLoggedByMeal),
     ctx
   );
   // Give the text back on failure — a long dictation shouldn't have to be repeated.
   if (!ok && !input.value) input.value = text;
+  updateSendButton();
+});
+
+// ---------- voice dictation ----------
+// The main button is a mic while the field is empty and turns into "send" once there's text
+// (like messengers). Dictation uses the browser's speech recognition; where it's unavailable
+// or blocked (some iOS home-screen setups), fall back to the keyboard's own 🎤 dictation.
+
+const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null; // the active dictation session, if any
+
+const SEND_BUTTON_LABELS = { mic: "Dictate", stop: "Stop dictation", send: "Send" };
+
+function updateSendButton() {
+  const btn = el("btn-send");
+  const mode = recognition ? "stop" : el("text-log-input").value.trim() ? "send" : "mic";
+  btn.classList.toggle("listening", mode === "stop");
+  if (btn.dataset.mode === mode) return;
+  btn.dataset.mode = mode;
+  btn.innerHTML = icon(mode);
+  btn.setAttribute("aria-label", SEND_BUTTON_LABELS[mode]);
+}
+
+function keyboardDictationHint(reason) {
+  const input = el("text-log-input");
+  input.focus();
+  setLoggingFeedback(`${reason ? reason + " " : ""}Нажми 🎤 на клавиатуре iPhone и надиктуй, что съел.`, reason ? "error" : "");
+}
+
+function startDictation() {
+  if (state.loggingBusy || recognition) return;
+  if (!SpeechRecognitionCtor) {
+    keyboardDictationHint("");
+    return;
+  }
+  const input = el("text-log-input");
+  const rec = new SpeechRecognitionCtor();
+  rec.lang = "ru-RU";
+  rec.interimResults = true;
+  rec.continuous = false;
+  let heardSomething = false;
+
+  rec.onresult = (event) => {
+    let text = "";
+    for (let i = 0; i < event.results.length; i++) text += event.results[i][0].transcript;
+    input.value = text.trim();
+    heardSomething = heardSomething || Boolean(input.value);
+  };
+  rec.onerror = (event) => {
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      keyboardDictationHint("Нет доступа к микрофону.");
+    } else if (event.error === "no-speech") {
+      setLoggingFeedback("Не расслышал — нажми микрофон и попробуй ещё раз.", "error");
+    } else if (event.error !== "aborted") {
+      keyboardDictationHint(`Диктовка не сработала (${event.error}).`);
+    }
+  };
+  rec.onend = () => {
+    recognition = null;
+    updateSendButton();
+    if (heardSomething && el("logging-feedback").textContent.startsWith("Слушаю")) {
+      setLoggingFeedback("Проверь текст и нажми отправить.", "");
+    }
+  };
+
+  try {
+    rec.start();
+  } catch (err) {
+    keyboardDictationHint("");
+    return;
+  }
+  recognition = rec;
+  setLoggingFeedback("Слушаю… скажи, что съел или выпил.", "");
+  updateSendButton();
+}
+
+el("text-log-input").addEventListener("input", updateSendButton);
+
+el("btn-send").addEventListener("click", (e) => {
+  const mode = el("btn-send").dataset.mode;
+  if (mode === "send") return; // regular form submit
+  e.preventDefault();
+  if (mode === "stop") recognition?.stop();
+  else startDictation();
 });
 
 el("btn-camera").onclick = () => el("camera-input").click();
@@ -1348,6 +1434,7 @@ if ("serviceWorker" in navigator) {
 el("app-version").textContent = `Colorize ${APP_VERSION}`;
 applyTheme();
 hydrateIcons();
+updateSendButton();
 renderAll();
 
 Garmin.preload().then(() => {
