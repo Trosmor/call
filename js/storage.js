@@ -17,10 +17,29 @@ const DEFAULT_PROFILE = {
   weightKg: null,
   activityLevel: "sedentary", // sedentary | light | moderate | active | very_active
   goal: "maintain", // lose | maintain | gain
-  goalRateKgPerWeek: 0.5
+  goalRateKgPerWeek: 0.5,
+  beerSizeMl: 500 // last picked serving in the beer counter: 330 | 500
 };
 
 const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"];
+
+// Standard pale lager (~4.5–5% ABV), per 100 ml. Most of the energy is alcohol (7 kcal/g),
+// which isn't a macro — so kcal is deliberately higher than 4·carb + 4·protein.
+const BEER_PER_100ML = { kcal: 43, proteinG: 0.5, fatG: 0, carbG: 3.6 };
+
+function beerTotals(ml) {
+  const f = Math.max(0, toNum(ml)) / 100;
+  return {
+    kcal: BEER_PER_100ML.kcal * f,
+    proteinG: BEER_PER_100ML.proteinG * f,
+    fatG: BEER_PER_100ML.fatG * f,
+    carbG: BEER_PER_100ML.carbG * f
+  };
+}
+
+function hasAnyLog(day) {
+  return MEAL_TYPES.some((t) => day.meals[t].length > 0) || toNum(day.waterLoggedMl) > 0 || toNum(day.beerMl) > 0;
+}
 
 function emptyDay(dateKey, profile) {
   return {
@@ -31,6 +50,7 @@ function emptyDay(dateKey, profile) {
     carbGoalG: profile.carbGoalG,
     waterGoalMl: profile.waterGoalMl,
     waterLoggedMl: 0,
+    beerMl: 0,
     meals: {
       breakfast: [],
       lunch: [],
@@ -277,6 +297,21 @@ export const Storage = {
     return root.days[key];
   },
 
+  BEER_PER_100ML,
+
+  beerTotals(ml) {
+    return beerTotals(ml);
+  },
+
+  addBeer(date, ml) {
+    const root = loadRoot();
+    const key = dateKey(date);
+    if (!root.days[key]) root.days[key] = emptyDay(key, root.profile);
+    root.days[key].beerMl = Math.max(0, toNum(root.days[key].beerMl) + toNum(ml));
+    saveRoot(root);
+    return root.days[key];
+  },
+
   /** All previously logged food items, most recent first — backs the "Search" picker. */
   allFoodItemsHistory() {
     const root = loadRoot();
@@ -308,6 +343,12 @@ export const Storage = {
         carb += toNum(item.carbG);
       }
     }
+    // Beer from the counter is part of the day's intake, same as any logged food.
+    const beer = beerTotals(day.beerMl);
+    kcal += beer.kcal;
+    protein += beer.proteinG;
+    fat += beer.fatG;
+    carb += beer.carbG;
     return { kcal: Math.round(kcal), protein: Math.round(protein), fat: Math.round(fat), carb: Math.round(carb) };
   },
 
@@ -406,8 +447,7 @@ export const Storage = {
       const day = root.days[key];
       // Merely browsing a date creates an empty day (fetch-or-create), and those
       // empties would drag every average down — only count days with actual logs.
-      const hasAnyLog = day && (MEAL_TYPES.some((t) => day.meals[t].length > 0) || day.waterLoggedMl > 0);
-      if (hasAnyLog) days.push(day);
+      if (day && hasAnyLog(day)) days.push(day);
     }
     if (days.length === 0) {
       return { daysLogged: 0, avgKcal: 0, avgProtein: 0, avgFat: 0, avgCarb: 0, avgWaterMl: 0, onTargetPct: 0 };
@@ -446,13 +486,17 @@ export const Storage = {
       const day = root.days[key];
       // Skip days with nothing logged — an auto-created empty day would read as
       // "ate nothing that day" to the model and skew the analysis.
-      if (!day || !MEAL_TYPES.some((t) => day.meals[t].length > 0)) continue;
+      const beerMl = toNum(day && day.beerMl);
+      if (!day || (!MEAL_TYPES.some((t) => day.meals[t].length > 0) && beerMl <= 0)) continue;
       const t = this.totals(day);
       const items = [];
       for (const mealType of MEAL_TYPES) {
         for (const item of day.meals[mealType]) {
           items.push(`${mealType}: ${item.name} (${Math.round(item.grams)}g, ${item.kcal}kcal)`);
         }
+      }
+      if (beerMl > 0) {
+        items.push(`drinks: light lager beer (${Math.round(beerMl)}ml, ${Math.round(beerTotals(beerMl).kcal)}kcal)`);
       }
       out.push({
         date: key,

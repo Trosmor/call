@@ -5,7 +5,7 @@ import { Garmin } from "./garmin.js";
 import { icon, hydrateIcons } from "./icons.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-09-23.3";
+const APP_VERSION = "2026-09-23.4";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "sun" },
@@ -482,6 +482,35 @@ function renderWater(day) {
   el("water-progress").style.width = `${Math.min(percent, 100)}%`;
 }
 
+/**
+ * Splits the day's beer volume back into 0.5 L and 0.33 L servings for the little mug row
+ * (big mug = 0.5, small = 0.33). Returns null if the volume isn't a clean combination.
+ */
+function beerServings(ml) {
+  for (let big = Math.floor(ml / 500); big >= 0; big--) {
+    const rest = ml - big * 500;
+    if (rest % 330 === 0) return { big, small: rest / 330 };
+  }
+  return null;
+}
+
+function renderBeer(day, profile) {
+  const ml = Math.round(Number(day.beerMl) || 0);
+  const size = profile.beerSizeMl === 330 ? 330 : 500;
+  el("beer-ml").textContent = ml ? `${(ml / 1000).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} L` : "0 ml";
+  el("beer-kcal").textContent = `${fmt(Storage.beerTotals(ml).kcal)} kcal`;
+  el("beer-kcal-330").textContent = `${fmt(Storage.beerTotals(330).kcal)} kcal`;
+  el("beer-kcal-500").textContent = `${fmt(Storage.beerTotals(500).kcal)} kcal`;
+  const radio = document.querySelector(`input[name="beer-size"][value="${size}"]`);
+  if (radio) radio.checked = true;
+
+  const servings = beerServings(ml);
+  const MAX_MUGS = 12;
+  el("beer-mugs").innerHTML = servings && servings.big + servings.small <= MAX_MUGS
+    ? icon("beer").repeat(servings.big) + `<span class="small">${icon("beer")}</span>`.repeat(servings.small)
+    : "";
+}
+
 function renderLoggingMealLabel() {
   const type = resolveDefaultMealType();
   el("logging-meal-label").textContent = `Logging to ${MEAL_META[type].label}`;
@@ -502,6 +531,7 @@ function renderAll() {
   renderGarminCard(day);
   renderMeals(day);
   renderWater(day);
+  renderBeer(day, profile);
   renderWorkouts(day);
   renderLoggingMealLabel();
 }
@@ -657,6 +687,33 @@ el("btn-remove-water").onclick = () => {
   Storage.addWater(state.selectedDate, -250);
   renderAll();
 };
+
+// ---------- beer ----------
+
+function selectedBeerSize() {
+  return Storage.getProfile().beerSizeMl === 330 ? 330 : 500;
+}
+
+el("btn-add-beer").onclick = () => {
+  Storage.addBeer(state.selectedDate, selectedBeerSize());
+  renderAll();
+  // Little "cheers" wiggle on the mug icon.
+  const mug = el("beer-icon");
+  mug.classList.remove("cheers");
+  void mug.offsetWidth; // restart the animation on rapid taps
+  mug.classList.add("cheers");
+};
+
+el("btn-remove-beer").onclick = () => {
+  Storage.addBeer(state.selectedDate, -selectedBeerSize());
+  renderAll();
+};
+
+document.querySelectorAll('input[name="beer-size"]').forEach((radio) => {
+  radio.addEventListener("change", () => {
+    Storage.saveProfile({ beerSizeMl: Number(radio.value) });
+  });
+});
 
 // ---------- navigation ----------
 

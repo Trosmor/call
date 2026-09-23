@@ -537,6 +537,47 @@ svg.icon { width: 20px; height: 20px; flex-shrink: 0; display: block; }
 .step-btn svg.icon { width: 18px; height: 18px; }
 .step-btn.accent { background: linear-gradient(135deg, var(--water-a), var(--water-b)); color: #fff; }
 
+/* ---------- beer counter ---------- */
+
+.row-icon.beer {
+  position: relative;
+  background: linear-gradient(160deg, #ffe08a 0%, #ffb31a 55%, #e88a00 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.row-icon.beer svg.icon { width: 21px; height: 21px; }
+/* A few rising bubbles behind the mug. */
+.row-icon.beer::before, .row-icon.beer::after {
+  content: "";
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+  bottom: 6px;
+  animation: bubble 2.6s ease-in infinite;
+}
+.row-icon.beer::before { left: 8px; }
+.row-icon.beer::after { right: 9px; width: 3px; height: 3px; animation-delay: 1.3s; }
+@keyframes bubble {
+  0% { transform: translateY(0); opacity: 0; }
+  20% { opacity: 0.8; }
+  100% { transform: translateY(-26px); opacity: 0; }
+}
+.row-icon.beer.cheers { animation: cheers 0.55s var(--ease); }
+@keyframes cheers {
+  0% { transform: rotate(0) scale(1); }
+  30% { transform: rotate(-16deg) scale(1.12); }
+  60% { transform: rotate(10deg) scale(1.05); }
+  100% { transform: rotate(0) scale(1); }
+}
+.step-btn.beer-accent { background: linear-gradient(135deg, #ffd35c, #f29200); color: #fff; }
+.segmented-control.two { grid-template-columns: repeat(2, 1fr); margin-top: 12px; }
+.beer-sizes b { font-weight: 500; color: var(--text-3); }
+.beer-mugs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; color: #ffb31a; }
+.beer-mugs:empty { display: none; }
+.beer-mugs svg.icon { width: 18px; height: 18px; }
+.beer-mugs .small svg.icon { width: 14px; height: 14px; margin-top: 4px; }
+
 .workouts-list:empty { display: none; }
 .workouts-list { margin-top: 10px; }
 

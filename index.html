@@ -127,6 +127,25 @@
           <div class="progress-track water"><div id="water-progress" class="progress-fill"></div></div>
         </section>
 
+        <section id="beer-card" class="card beer-card">
+          <div class="row-card">
+            <div id="beer-icon" class="row-icon beer" data-icon="beer"></div>
+            <div class="row-text">
+              <div class="row-title">Beer</div>
+              <div class="row-sub"><span id="beer-ml">0 ml</span> · <span id="beer-kcal">0 kcal</span></div>
+            </div>
+            <div class="stepper">
+              <button id="btn-remove-beer" class="step-btn" aria-label="Remove one serving" data-icon="minus"></button>
+              <button id="btn-add-beer" class="step-btn beer-accent" aria-label="Add one serving" data-icon="plus"></button>
+            </div>
+          </div>
+          <div class="segmented-control two beer-sizes" role="radiogroup" aria-label="Serving size">
+            <label><input type="radio" name="beer-size" value="330" /><span>0.33 L · <b id="beer-kcal-330"></b></span></label>
+            <label><input type="radio" name="beer-size" value="500" /><span>0.5 L · <b id="beer-kcal-500"></b></span></label>
+          </div>
+          <div id="beer-mugs" class="beer-mugs"></div>
+        </section>
+
         <section id="garmin-card" class="card hidden">
           <div class="card-head">
             <span class="card-head-icon" data-icon="watch"></span>
