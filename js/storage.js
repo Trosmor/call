@@ -7,8 +7,9 @@ const DEFAULT_PROFILE = {
   fatGoalG: 75,
   carbGoalG: 220,
   waterGoalMl: 2000,
-  preferredModel: "sonnet", // "sonnet" | "haiku"
-  apiKey: "",
+  preferredModel: "sonnet", // "sonnet" | "haiku" | "glm"
+  apiKey: "", // Anthropic
+  openrouterApiKey: "", // only needed for GLM (served through OpenRouter)
   // Body profile — used for BMR/TDEE goal calculation and as context for AI nutrition analysis.
   age: null,
   sex: "male", // "male" | "female"
@@ -328,6 +329,7 @@ export const Storage = {
     day.mealRatings[mealType] = {
       score: rating.score,
       comment: rating.comment,
+      model: rating.model || null, // which model rated it — for comparing Sonnet/Haiku/GLM
       itemsSignature,
       ratedAt: new Date().toISOString()
     };
@@ -462,9 +464,9 @@ export const Storage = {
     return loadRoot().lastReport;
   },
 
-  saveLastReport(text) {
+  saveLastReport(text, model = null) {
     const root = loadRoot();
-    root.lastReport = { text, generatedAt: new Date().toISOString() };
+    root.lastReport = { text, model, generatedAt: new Date().toISOString() };
     saveRoot(root);
     return root.lastReport;
   },

@@ -4,7 +4,7 @@ import { computeGoals, ACTIVITY_LABELS, GOAL_LABELS } from "./calc.js";
 import { Garmin } from "./garmin.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-09-23.1";
+const APP_VERSION = "2026-09-23.2";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "☀️" },
@@ -279,8 +279,9 @@ function renderMeals(day) {
 
 async function rateMeal(mealType) {
   const profile = Storage.getProfile();
-  if (!profile.apiKey) {
-    setLoggingFeedback("Укажи Claude API-ключ в Настройках.", "error");
+  const route = ClaudeClient.routeFor(profile);
+  if (!route.apiKey) {
+    setLoggingFeedback(ClaudeClient.missingKeyMessage(route), "error");
     return;
   }
   // Capture the day and the exact items being rated BEFORE the request: the user may switch
@@ -298,7 +299,6 @@ async function rateMeal(mealType) {
   renderMeals(day);
   setLoggingFeedback(`Оцениваю ${MEAL_META[mealType].label.toLowerCase()}...`, "");
   try {
-    const model = ClaudeClient.modelIdFor(profile.preferredModel);
     const payloadItems = items.map((i) => ({
       name: i.name,
       grams: i.grams,
@@ -308,9 +308,9 @@ async function rateMeal(mealType) {
       carb_g: i.carbG
     }));
     const budget = effectiveBudget(day, profile);
-    const rating = await ClaudeClient.rateMeal(profile.apiKey, model, mealType, payloadItems, profile, budget);
-    Storage.saveMealRating(date, mealType, rating, signature);
-    setLoggingFeedback(`${MEAL_META[mealType].label}: ${rating.score}/100`, "success");
+    const rating = await ClaudeClient.rateMeal(route, mealType, payloadItems, profile, budget);
+    Storage.saveMealRating(date, mealType, { ...rating, model: route.name }, signature);
+    setLoggingFeedback(`${MEAL_META[mealType].label}: ${rating.score}/100 · ${route.name}`, "success");
   } catch (err) {
     setLoggingFeedback(err instanceof ClaudeAPIError ? err.message : `Ошибка: ${err.message}`, "error");
   } finally {
@@ -350,6 +350,7 @@ function mealCardHTML(day, type) {
   const ratingBlock = rating
     ? `<div class="meal-rating">
         ${escapeHtml(rating.comment)}
+        ${rating.model ? `<div class="meal-rating-model">Оценка: ${escapeHtml(rating.model)}</div>` : ""}
         ${isStale ? `<div class="meal-rating-stale">Состав изменился с момента оценки — оцени заново.</div>` : ""}
       </div>`
     : "";
@@ -620,6 +621,7 @@ function loadSettingsForm() {
     document.querySelector('input[name="model"][value="sonnet"]');
   modelRadio.checked = true;
   el("api-key-status").textContent = profile.apiKey ? "Key is set." : "No key set yet.";
+  el("openrouter-key-status").textContent = profile.openrouterApiKey ? "Key is set." : "No key set yet.";
 
   el("profile-age").value = profile.age ?? "";
   el("profile-sex").value = profile.sex;
@@ -694,6 +696,14 @@ el("btn-save-key").onclick = () => {
   Storage.saveProfile({ apiKey: key });
   el("api-key-input").value = "";
   el("api-key-status").textContent = "Saved.";
+};
+
+el("btn-save-openrouter-key").onclick = () => {
+  const key = el("openrouter-key-input").value.trim();
+  if (!key) return;
+  Storage.saveProfile({ openrouterApiKey: key });
+  el("openrouter-key-input").value = "";
+  el("openrouter-key-status").textContent = "Saved.";
 };
 
 // ---------- backup ----------
@@ -879,23 +889,25 @@ function applyClaudeResponse(response, ctx) {
     return;
   }
   const otherDay = Storage.dateKey(date) !== Storage.dateKey(state.selectedDate);
-  setLoggingFeedback(messages.join(" · ") + (otherDay ? ` (за ${date.toLocaleDateString()})` : ""), "success");
+  setLoggingFeedback(
+    messages.join(" · ") + (otherDay ? ` (за ${date.toLocaleDateString()})` : "") + (ctx.modelName ? ` · ${ctx.modelName}` : ""),
+    "success"
+  );
   renderAll();
 }
 
 /** Returns true on success, so the caller can restore the user's input on failure. */
 async function runClaudeRequest(fn, ctx) {
-  const profile = Storage.getProfile();
-  if (!profile.apiKey) {
-    setLoggingFeedback("Укажи Claude API-ключ в Настройках.", "error");
+  const route = ClaudeClient.routeFor(Storage.getProfile());
+  if (!route.apiKey) {
+    setLoggingFeedback(ClaudeClient.missingKeyMessage(route), "error");
     return false;
   }
   setLoggingBusy(true);
   setLoggingFeedback("");
   try {
-    const model = ClaudeClient.modelIdFor(profile.preferredModel);
-    const response = await fn(profile.apiKey, model);
-    applyClaudeResponse(response, ctx);
+    const response = await fn(route);
+    applyClaudeResponse(response, { ...ctx, modelName: route.name });
     return true;
   } catch (err) {
     setLoggingFeedback(err instanceof ClaudeAPIError ? err.message : `Ошибка: ${err.message}`, "error");
@@ -923,7 +935,7 @@ el("text-log-form").addEventListener("submit", async (e) => {
   }
   input.value = "";
   const ok = await runClaudeRequest(
-    (apiKey, model) => ClaudeClient.analyzeFoodText(apiKey, model, text, alreadyLoggedByMeal),
+    (route) => ClaudeClient.analyzeFoodText(route, text, alreadyLoggedByMeal),
     ctx
   );
   // Give the text back on failure — a long dictation shouldn't have to be repeated.
@@ -945,7 +957,7 @@ el("camera-input").addEventListener("change", async (e) => {
     setLoggingFeedback("Не удалось прочитать фото — попробуй другое.", "error");
     return;
   }
-  await runClaudeRequest((apiKey, model) => ClaudeClient.analyzeFoodPhoto(apiKey, model, base64), ctx);
+  await runClaudeRequest((route) => ClaudeClient.analyzeFoodPhoto(route, base64), ctx);
 });
 
 /** Downscale to ~1024px and JPEG-compress before sending, to keep vision token cost low. */
@@ -1057,7 +1069,8 @@ function renderReportsScreen() {
   const last = Storage.getLastReport();
   if (last) {
     el("report-card").classList.remove("hidden");
-    el("report-meta").textContent = `Last analyzed: ${new Date(last.generatedAt).toLocaleString()}`;
+    el("report-meta").textContent =
+      `Last analyzed: ${new Date(last.generatedAt).toLocaleString()}` + (last.model ? ` · ${last.model}` : "");
     el("report-text").innerHTML = renderMarkdown(last.text);
   } else {
     el("report-card").classList.add("hidden");
@@ -1101,8 +1114,9 @@ function inlineMarkdown(str) {
 
 el("btn-analyze").onclick = async () => {
   const profile = Storage.getProfile();
-  if (!profile.apiKey) {
-    el("analyze-status").textContent = "Укажи Claude API-ключ в Настройках.";
+  const route = ClaudeClient.routeFor(profile);
+  if (!route.apiKey) {
+    el("analyze-status").textContent = ClaudeClient.missingKeyMessage(route);
     return;
   }
   if (!profile.age || !profile.heightCm || !profile.weightKg) {
@@ -1113,7 +1127,6 @@ el("btn-analyze").onclick = async () => {
   btn.disabled = true;
   el("analyze-status").textContent = "Анализирую...";
   try {
-    const model = ClaudeClient.modelIdFor(profile.preferredModel);
     const recentDays = Storage.recentDaysForAnalysis(state.selectedDate, 7);
     for (const day of recentDays) {
       const g = Garmin.dayFor(day.date);
@@ -1131,8 +1144,8 @@ el("btn-analyze").onclick = async () => {
         };
       }
     }
-    const text = await ClaudeClient.analyzeNutrition(profile.apiKey, model, profile, recentDays);
-    Storage.saveLastReport(text);
+    const text = await ClaudeClient.analyzeNutrition(route, profile, recentDays);
+    Storage.saveLastReport(text, route.name);
     renderReportsScreen();
   } catch (err) {
     el("analyze-status").textContent = err instanceof ClaudeAPIError ? err.message : `Ошибка: ${err.message}`;

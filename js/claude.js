@@ -92,11 +92,20 @@ const MEAL_RATING_SYSTEM_PROMPT = `Ты — персональный нутри�
 
 Пиши по делу, без общих фраз ("следите за питанием"), комментарий должен быть про конкретные продукты из списка. Никакого текста вне JSON.`;
 
-const MODEL_IDS = {
-  sonnet: "claude-sonnet-5",
-  haiku: "claude-haiku-4-5"
+// Selectable models. Claude goes straight to Anthropic (which allows browser calls via the
+// dangerous-direct-browser-access header). GLM goes through OpenRouter: Z.ai's own API sends
+// no CORS headers, so a browser can't call it directly; OpenRouter does allow browser calls.
+const MODELS = {
+  sonnet: { provider: "anthropic", id: "claude-sonnet-5", name: "Sonnet" },
+  haiku: { provider: "anthropic", id: "claude-haiku-4-5", name: "Haiku" },
+  glm: { provider: "openrouter", id: "z-ai/glm-5.3-flash", name: "GLM" }
 };
 
+const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+
+const PROVIDER_LABEL = { anthropic: "Claude", openrouter: "OpenRouter" };
+
+// Error type kept under its original name — app.js imports it; it now covers both providers.
 export class ClaudeAPIError extends Error {}
 
 // Output-token caps. Sonnet 5 runs adaptive thinking by default, and thinking tokens are
@@ -112,18 +121,36 @@ const RETRY_DELAYS_MS = [1500, 4000];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function extractText(data) {
+/** Anthropic Messages response → { text, truncated }. */
+function extractAnthropicText(data, route) {
   const block = (data.content || []).find((b) => b.type === "text");
   if (!block) {
-    if (data.stop_reason === "max_tokens") throw new ClaudeAPIError("Ответ Claude обрезался по лимиту длины — попробуй ещё раз.");
-    if (data.stop_reason === "refusal") throw new ClaudeAPIError("Claude отказался обрабатывать этот запрос.");
-    throw new ClaudeAPIError("Не удалось разобрать ответ от Claude.");
+    if (data.stop_reason === "max_tokens") throw new ClaudeAPIError(`Ответ ${route.name} обрезался по лимиту длины — попробуй ещё раз.`);
+    if (data.stop_reason === "refusal") throw new ClaudeAPIError(`${route.name} отказался обрабатывать этот запрос.`);
+    throw new ClaudeAPIError(`Не удалось разобрать ответ от ${route.name}.`);
   }
   return { text: block.text, truncated: data.stop_reason === "max_tokens" };
 }
 
+/** OpenRouter chat-completions response → { text, truncated }. */
+function extractOpenRouterText(data, route) {
+  // Once generation has started, OpenRouter reports failures with HTTP 200 and an `error`
+  // object in the body (no `choices`) — the status code alone isn't enough.
+  if (data.error) throw new ClaudeAPIError(`${route.name}: ${data.error.message || "ошибка генерации"} — попробуй ещё раз.`);
+  const choice = data.choices?.[0];
+  const finish = choice?.finish_reason;
+  let text = choice?.message?.content;
+  if (Array.isArray(text)) text = text.map((p) => p.text || "").join("");
+  if (!text) {
+    if (finish === "length") throw new ClaudeAPIError(`Ответ ${route.name} обрезался по лимиту длины — попробуй ещё раз.`);
+    if (finish === "content_filter") throw new ClaudeAPIError(`${route.name} отказался обрабатывать этот запрос.`);
+    throw new ClaudeAPIError(`Не удалось разобрать ответ от ${route.name}.`);
+  }
+  return { text, truncated: finish === "length" };
+}
+
 /** Turns an HTTP error response into a message a person can act on, instead of raw JSON. */
-async function apiError(response) {
+async function apiError(response, route) {
   let message = "";
   let type = "";
   try {
@@ -134,14 +161,77 @@ async function apiError(response) {
     // non-JSON error body — fall through to the status-based message
   }
   const s = response.status;
-  if (s === 401) return new ClaudeAPIError("Неверный Claude API-ключ — проверь его в Настройках.");
-  if (/credit balance/i.test(message)) {
-    return new ClaudeAPIError("На счёте Anthropic закончились кредиты — пополни баланс в console.anthropic.com.");
+  const who = PROVIDER_LABEL[route.provider];
+  if (route.provider === "openrouter") {
+    if (s === 401) return new ClaudeAPIError("Неверный ключ OpenRouter — проверь его в Настройках.");
+    if (s === 402) return new ClaudeAPIError("На счёте OpenRouter закончились кредиты — пополни баланс на openrouter.ai.");
+    if (s === 403) return new ClaudeAPIError(`OpenRouter отклонил запрос${message ? `: ${message}` : "."}`);
+    if (s === 503) return new ClaudeAPIError("GLM сейчас недоступна ни у одного провайдера — попробуй позже или переключись на Sonnet.");
+  } else {
+    if (s === 401) return new ClaudeAPIError("Неверный Claude API-ключ — проверь его в Настройках.");
+    if (/credit balance/i.test(message)) {
+      return new ClaudeAPIError("На счёте Anthropic закончились кредиты — пополни баланс в console.anthropic.com.");
+    }
+    if (s === 529 || type === "overloaded_error") return new ClaudeAPIError("Claude сейчас перегружен — попробуй через минуту.");
   }
-  if (s === 429) return new ClaudeAPIError("Слишком много запросов к Claude — подожди минуту и попробуй снова.");
-  if (s === 529 || type === "overloaded_error") return new ClaudeAPIError("Claude сейчас перегружен — попробуй через минуту.");
-  if (s >= 500) return new ClaudeAPIError(`Сбой на стороне Claude (${s}) — попробуй ещё раз.`);
-  return new ClaudeAPIError(`Claude API вернул ошибку ${s}${message ? `: ${message}` : ""}`);
+  if (s === 429) return new ClaudeAPIError(`Слишком много запросов к ${who} — подожди минуту и попробуй снова.`);
+  if (s >= 500) return new ClaudeAPIError(`Сбой на стороне ${who} (${s}) — попробуй ещё раз.`);
+  return new ClaudeAPIError(`${who} вернул ошибку ${s}${message ? `: ${message}` : ""}`);
+}
+
+/**
+ * Converts our Anthropic-style content blocks into OpenAI-style parts for OpenRouter.
+ * Text goes first: OpenRouter's docs recommend the prompt before the images.
+ */
+function toOpenRouterContent(userContent) {
+  const text = userContent.filter((b) => b.type === "text").map((b) => ({ type: "text", text: b.text }));
+  const images = userContent
+    .filter((b) => b.type === "image")
+    .map((b) => ({ type: "image_url", image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` } }));
+  return [...text, ...images];
+}
+
+/** Provider-specific URL, headers and body for one request. */
+function buildRequest(route, systemPrompt, userContent, kind, jsonOutput) {
+  if (route.provider === "openrouter") {
+    return {
+      url: OPENROUTER_ENDPOINT,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${route.apiKey}`,
+        "http-referer": "https://trosmor.github.io/call/",
+        "x-title": "Colorize"
+      },
+      body: {
+        model: route.id,
+        max_tokens: MAX_TOKENS[kind],
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: toOpenRouterContent(userContent) }
+        ],
+        // JSON mode where the reply must be JSON (logging, rating); ignored by providers
+        // that don't support it — the tolerant parser still covers those.
+        ...(jsonOutput ? { response_format: { type: "json_object" } } : {}),
+        // Food photos, weight, sleep and HRV are health data: skip providers that may store it.
+        provider: { data_collection: "deny" }
+      }
+    };
+  }
+  return {
+    url: ENDPOINT,
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": route.apiKey,
+      "anthropic-version": ANTHROPIC_VERSION,
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: {
+      model: route.id,
+      max_tokens: MAX_TOKENS[kind],
+      system: systemPrompt,
+      messages: [{ role: "user", content: userContent }]
+    }
+  };
 }
 
 /**
@@ -166,28 +256,25 @@ function extractJsonObject(rawText) {
   }
 }
 
-function parseFoodResponse(rawText) {
+function parseFoodResponse(rawText, route) {
   try {
     return extractJsonObject(rawText);
   } catch (e) {
-    throw new ClaudeAPIError("Claude вернул не-JSON ответ: " + rawText.trim().slice(0, 200));
+    throw new ClaudeAPIError(`${route.name} вернул не-JSON ответ: ` + rawText.trim().slice(0, 200));
   }
 }
 
 /**
- * One Messages API call with a hard timeout (a hung request used to leave the spinner and
- * disabled buttons stuck until reload) and up to 2 automatic retries on transient failures
- * (overloaded / rate limited / 5xx / dropped connection).
+ * One model call with a hard timeout (a hung request used to leave the spinner and disabled
+ * buttons stuck until reload) and up to 2 automatic retries on transient failures
+ * (overloaded / rate limited / 5xx / dropped connection). Works for both providers.
  */
-async function send(apiKey, model, systemPrompt, userContent, kind) {
-  if (!apiKey) throw new ClaudeAPIError("Укажи Claude API-ключ в Настройках.");
+async function send(route, systemPrompt, userContent, kind, { jsonOutput = false } = {}) {
+  if (!route.apiKey) throw new ClaudeAPIError(ClaudeClient.missingKeyMessage(route));
 
-  const body = JSON.stringify({
-    model,
-    max_tokens: MAX_TOKENS[kind],
-    system: systemPrompt,
-    messages: [{ role: "user", content: userContent }]
-  });
+  const req = buildRequest(route, systemPrompt, userContent, kind, jsonOutput);
+  const body = JSON.stringify(req.body);
+  const who = PROVIDER_LABEL[route.provider];
 
   let lastError = null;
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
@@ -196,31 +283,22 @@ async function send(apiKey, model, systemPrompt, userContent, kind) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS[kind]);
     try {
-      const response = await fetch(ENDPOINT, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": ANTHROPIC_VERSION,
-          "anthropic-dangerous-direct-browser-access": "true"
-        },
-        body,
-        signal: controller.signal
-      });
+      const response = await fetch(req.url, { method: "POST", headers: req.headers, body, signal: controller.signal });
       if (!response.ok) {
-        const err = await apiError(response);
+        const err = await apiError(response, route);
         if (!RETRYABLE_STATUSES.has(response.status)) throw err;
         lastError = err;
         continue;
       }
-      return extractText(await response.json()); // body read stays under the same timeout
+      const data = await response.json(); // body read stays under the same timeout
+      return route.provider === "openrouter" ? extractOpenRouterText(data, route) : extractAnthropicText(data, route);
     } catch (e) {
       if (e instanceof ClaudeAPIError) throw e;
       if (e.name === "AbortError") {
-        throw new ClaudeAPIError("Claude не ответил вовремя — проверь связь и попробуй ещё раз.");
+        throw new ClaudeAPIError(`${route.name} не ответил вовремя — проверь связь и попробуй ещё раз.`);
       }
       // Network-level failure (offline, iOS suspending the app mid-request) — retryable.
-      lastError = new ClaudeAPIError("Нет связи с Claude — проверь интернет и попробуй ещё раз.");
+      lastError = new ClaudeAPIError(`Нет связи с ${who} — проверь интернет и попробуй ещё раз.`);
     } finally {
       clearTimeout(timer);
     }
@@ -228,17 +306,29 @@ async function send(apiKey, model, systemPrompt, userContent, kind) {
   throw lastError;
 }
 
+/**
+ * All public methods take a `route` from routeFor(profile): which model, which provider,
+ * and the matching API key. Named ClaudeClient for history; it also drives GLM.
+ */
 export const ClaudeClient = {
-  modelIdFor(preferredModel) {
-    return MODEL_IDS[preferredModel] || MODEL_IDS.sonnet;
+  routeFor(profile) {
+    const model = MODELS[profile.preferredModel] || MODELS.sonnet;
+    const apiKey = model.provider === "openrouter" ? profile.openrouterApiKey : profile.apiKey;
+    return { ...model, apiKey: apiKey || "" };
   },
 
-  async analyzeFoodPhoto(apiKey, model, imageBase64, mediaType = "image/jpeg") {
-    const { text } = await send(apiKey, model, SYSTEM_PROMPT, [
+  missingKeyMessage(route) {
+    return route.provider === "openrouter"
+      ? "Для GLM укажи ключ OpenRouter в Настройках."
+      : "Укажи Claude API-ключ в Настройках.";
+  },
+
+  async analyzeFoodPhoto(route, imageBase64, mediaType = "image/jpeg") {
+    const { text } = await send(route, SYSTEM_PROMPT, [
       { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
       { type: "text", text: "Распознай еду на фото и верни JSON по схеме." }
-    ], "logging");
-    return parseFoodResponse(text);
+    ], "logging", { jsonOutput: true });
+    return parseFoodResponse(text, route);
   },
 
   /**
@@ -246,20 +336,20 @@ export const ClaudeClient = {
    * the model recognize edit/delete requests ("поменяй йогурт на 250 грамм") instead of
    * only ever adding new food. Omit or pass {} when there's nothing to reference yet.
    */
-  async analyzeFoodText(apiKey, model, text, alreadyLoggedByMeal = {}) {
+  async analyzeFoodText(route, text, alreadyLoggedByMeal = {}) {
     const hasContext = Object.values(alreadyLoggedByMeal).some((items) => items && items.length);
     const content = hasContext
       ? `${text}\n\nalready_logged: ${JSON.stringify(alreadyLoggedByMeal)}`
       : text;
-    const { text: raw } = await send(apiKey, model, SYSTEM_PROMPT, [{ type: "text", text: content }], "logging");
-    return parseFoodResponse(raw);
+    const { text: raw } = await send(route, SYSTEM_PROMPT, [{ type: "text", text: content }], "logging", { jsonOutput: true });
+    return parseFoodResponse(raw, route);
   },
 
   /**
    * Returns { score: 0-100, comment }. `dailyCalorieBudget` is the day's effective budget
    * (goal + Garmin active calories), so portion size is judged against what the app shows.
    */
-  async rateMeal(apiKey, model, mealType, items, profile, dailyCalorieBudget) {
+  async rateMeal(route, mealType, items, profile, dailyCalorieBudget) {
     const payload = {
       meal_type: mealType,
       items,
@@ -272,11 +362,11 @@ export const ClaudeClient = {
       }
     };
     const { text, truncated } = await send(
-      apiKey,
-      model,
+      route,
       MEAL_RATING_SYSTEM_PROMPT,
       [{ type: "text", text: JSON.stringify(payload) }],
-      "rating"
+      "rating",
+      { jsonOutput: true }
     );
     let parsed;
     try {
@@ -285,7 +375,7 @@ export const ClaudeClient = {
       throw new ClaudeAPIError(
         truncated
           ? "Ответ оценки обрезался — попробуй ещё раз."
-          : "Claude вернул не-JSON ответ при оценке приёма пищи. Попробуй ещё раз."
+          : `${route.name} вернул не-JSON ответ при оценке приёма пищи. Попробуй ещё раз.`
       );
     }
     if (typeof parsed.score !== "number" || !parsed.comment) {
@@ -295,7 +385,7 @@ export const ClaudeClient = {
   },
 
   /** Returns markdown text, not JSON — see ANALYSIS_SYSTEM_PROMPT. */
-  async analyzeNutrition(apiKey, model, profile, recentDays) {
+  async analyzeNutrition(route, profile, recentDays) {
     const payload = {
       profile: {
         age: profile.age,
@@ -309,8 +399,7 @@ export const ClaudeClient = {
       days: recentDays
     };
     const { text, truncated } = await send(
-      apiKey,
-      model,
+      route,
       ANALYSIS_SYSTEM_PROMPT,
       [{ type: "text", text: JSON.stringify(payload) }],
       "analysis"

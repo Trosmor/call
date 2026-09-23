@@ -163,11 +163,13 @@
         </section>
 
         <section class="card form-card">
-          <h2>Claude model</h2>
+          <h2>AI model</h2>
           <div class="segmented">
             <label><input type="radio" name="model" value="sonnet" /> Sonnet (recommended)</label>
             <label><input type="radio" name="model" value="haiku" /> Haiku (cheaper)</label>
+            <label><input type="radio" name="model" value="glm" /> GLM 5.3 Flash (cheapest, via OpenRouter)</label>
           </div>
+          <p class="hint">Модель используется для записи еды, оценки приёмов пищи и анализа. Какая модель ответила, видно в подтверждении и в оценке — удобно сравнивать.</p>
         </section>
 
         <section class="card form-card">
@@ -179,9 +181,17 @@
         </section>
 
         <section class="card form-card">
+          <h2>OpenRouter API key (for GLM)</h2>
+          <input id="openrouter-key-input" class="key-input" type="password" placeholder="sk-or-..." autocomplete="off" />
+          <button id="btn-save-openrouter-key" class="primary-btn">Save</button>
+          <p id="openrouter-key-status" class="hint"></p>
+          <p class="hint">Нужен только для GLM. Ключ хранится только здесь и уходит лишь на openrouter.ai. Запросы направляются только к провайдерам, которые не сохраняют данные.</p>
+        </section>
+
+        <section class="card form-card">
           <h2>Backup</h2>
           <p class="hint">Все данные хранятся только в этом браузере. Скачивай бэкап регулярно — иначе очистка кэша Safari или смена телефона сотрёт весь дневник.</p>
-          <p class="hint">Бэкап включает твой Claude API-ключ — храни файл в надёжном месте и не пересылай его.</p>
+          <p class="hint">Бэкап включает твои API-ключи (Claude и OpenRouter) — храни файл в надёжном месте и не пересылай его.</p>
           <button id="btn-export-backup" class="primary-btn">Download backup</button>
           <input id="import-backup-input" type="file" accept=".json,application/json" hidden />
           <button id="btn-import-backup" class="primary-btn secondary">Restore from file</button>
