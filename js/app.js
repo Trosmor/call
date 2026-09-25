@@ -5,7 +5,7 @@ import { Garmin } from "./garmin.js";
 import { icon, hydrateIcons } from "./icons.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-09-23.5";
+const APP_VERSION = "2026-09-25.1";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "sun" },
@@ -979,8 +979,28 @@ const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
  * user switched days or opened another meal card meanwhile, the food used to follow the
  * current screen instead of going where it was sent from.
  */
-function captureLoggingContext(source) {
-  return { date: new Date(state.selectedDate), defaultMealType: resolveDefaultMealType(), source };
+const MEAL_WORDS = {
+  breakfast: /завтрак|breakfast/i,
+  lunch: /обед|ланч|lunch/i,
+  dinner: /ужин|dinner|supper/i,
+  snack: /перекус|полдник|снек|snack/i
+};
+
+/**
+ * Where new food lands. The "Logging to X" label is the contract: the model's meal_type is
+ * only trusted when the user actually named a meal in the text ("на обед", "после ужина").
+ * Otherwise the model used to guess from the food itself — oatmeal or eggs went to Breakfast
+ * even while the label said Lunch, and photos (no text at all) were the worst case.
+ */
+function resolveAddMealType(modelMealType, ctx) {
+  const text = ctx.text || "";
+  const named = Storage.MEAL_TYPES.filter((type) => MEAL_WORDS[type].test(text));
+  if (!named.length) return ctx.defaultMealType;
+  return normalizeMealType(modelMealType) || named[0];
+}
+
+function captureLoggingContext(source, text = "") {
+  return { date: new Date(state.selectedDate), defaultMealType: resolveDefaultMealType(), source, text };
 }
 
 function applyClaudeResponse(response, ctx) {
@@ -1020,7 +1040,7 @@ function applyClaudeResponse(response, ctx) {
   } else {
     const items = Array.isArray(response.items) ? response.items : [];
     if (items.length) {
-      const mealType = normalizeMealType(response.meal_type) || ctx.defaultMealType;
+      const mealType = resolveAddMealType(response.meal_type, ctx);
       const summaries = items.map((item) => {
         Storage.addFoodItem(date, mealType, {
           name: item.name,
@@ -1087,7 +1107,7 @@ el("text-log-form").addEventListener("submit", async (e) => {
   const input = el("text-log-input");
   const text = input.value.trim();
   if (!text) return;
-  const ctx = captureLoggingContext("voice");
+  const ctx = captureLoggingContext("voice", text);
   const day = Storage.getDay(ctx.date);
   const alreadyLoggedByMeal = {};
   for (const mealType of Storage.MEAL_TYPES) {
