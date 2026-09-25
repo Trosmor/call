@@ -965,3 +965,72 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); -webkit-backdrop-filter: blu
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- real expenditure ---------- */
+
+.exp-title { font-size: 17px; font-weight: 700; margin-bottom: 2px; }
+.exp-progress { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-2); margin-top: 12px; }
+.exp-progress b { color: var(--text); font-family: var(--font-num); }
+.expenditure-card .progress-track { margin-top: 6px; }
+.exp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.exp-head .hint { margin-top: 2px; }
+.exp-num { font-family: var(--font-num); font-size: 34px; font-weight: 750; letter-spacing: -0.03em; line-height: 1.05; }
+.exp-num small { font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--text-3); margin-left: 4px; }
+.exp-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  color: var(--mid);
+  background: color-mix(in srgb, var(--mid) 16%, transparent);
+}
+.exp-badge.ready { color: var(--good); background: color-mix(in srgb, var(--good) 16%, transparent); }
+.exp-rows { margin-top: 12px; border-top: 1px solid var(--hairline); }
+.exp-rows > div { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--hairline); font-size: 14px; }
+.exp-rows span { color: var(--text-2); }
+.exp-rows b { font-family: var(--font-num); font-weight: 650; }
+.exp-verdict { font-size: 14px; line-height: 1.45; margin: 12px 0 0; }
+.exp-suggest { margin-top: 14px; padding: 12px; border-radius: var(--radius-sm); background: var(--surface-2); font-size: 14px; }
+.exp-suggest .primary-btn { margin-top: 10px; }
+
+.weight-chart .chart-raw { fill: var(--text-3); }
+
+.row-sub.nudge { color: var(--mid); }
+
+.incomplete-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.incomplete-toggle span { display: flex; flex-direction: column; font-size: 14px; font-weight: 550; }
+.incomplete-toggle small { font-size: 12px; font-weight: 400; color: var(--text-3); margin-top: 1px; }
+.incomplete-toggle input {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 44px;
+  height: 26px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--surface-3);
+  position: relative;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+.incomplete-toggle input::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s var(--ease);
+}
+.incomplete-toggle input:checked { background: var(--mid); }
+.incomplete-toggle input:checked::after { transform: translateX(18px); }

@@ -35,21 +35,36 @@ export function tdee(bmrValue, activityLevel) {
   return bmrValue * (ACTIVITY_MULTIPLIERS[activityLevel] || ACTIVITY_MULTIPLIERS.sedentary);
 }
 
+/** Signed kg/week for the profile's goal: negative to lose, positive to gain, 0 to maintain. */
+export function goalRate({ goal, goalRateKgPerWeek }) {
+  if (goal === "lose") return -Math.abs(goalRateKgPerWeek || 0.5);
+  if (goal === "gain") return Math.abs(goalRateKgPerWeek || 0.25);
+  return 0;
+}
+
+/** kcal/day to add (surplus) or subtract (deficit) for the profile's goal rate. */
+export function dailyGoalAdjustment(profile) {
+  return (goalRate(profile) * KCAL_PER_KG) / 7;
+}
+
+/** Protein ~2 g/kg, fat 25% of calories, carbs the rest. */
+export function macrosForCalories(calorieGoal, weightKg) {
+  const proteinGoalG = Math.round((weightKg || 0) * 2);
+  const fatGoalG = Math.round((calorieGoal * 0.25) / 9);
+  const carbGoalG = Math.max(0, Math.round((calorieGoal - proteinGoalG * 4 - fatGoalG * 9) / 4));
+  return { proteinGoalG, fatGoalG, carbGoalG };
+}
+
 /**
  * Computes daily calorie + macro goals from a body profile.
  * goalRateKgPerWeek: positive for gain, negative for loss, 0 for maintain.
  */
 export function computeGoals(profile) {
-  const { sex, weightKg, heightCm, age, activityLevel, goal, goalRateKgPerWeek } = profile;
+  const { sex, weightKg, heightCm, age, activityLevel } = profile;
   const bmrValue = bmr({ sex, weightKg, heightCm, age });
   const maintenance = tdee(bmrValue, activityLevel);
 
-  let rate = goalRateKgPerWeek || 0;
-  if (goal === "lose") rate = -Math.abs(rate || 0.5);
-  else if (goal === "gain") rate = Math.abs(rate || 0.25);
-  else rate = 0;
-
-  const dailyAdjustment = (rate * KCAL_PER_KG) / 7;
+  const dailyAdjustment = dailyGoalAdjustment(profile);
   // Never target below BMR: with a sedentary multiplier even the default 0.5 kg/week loss
   // pushed the goal under basal metabolism (e.g. 80 kg male: BMR 1780, goal 1586), which is
   // an unsafe recommendation. Garmin active calories are still added on top in the app.
@@ -57,14 +72,7 @@ export function computeGoals(profile) {
   const calorieGoal = Math.max(rawGoal, Math.round(bmrValue));
   const clampedToBmr = calorieGoal > rawGoal;
 
-  // Protein: ~2g/kg bodyweight (supports muscle retention in a deficit or growth in a surplus).
-  const proteinGoalG = Math.round(weightKg * 2);
-  // Fat: 25% of total calories.
-  const fatGoalG = Math.round((calorieGoal * 0.25) / 9);
-  // Carbs: remaining calories.
-  const proteinKcal = proteinGoalG * 4;
-  const fatKcal = fatGoalG * 9;
-  const carbGoalG = Math.max(0, Math.round((calorieGoal - proteinKcal - fatKcal) / 4));
+  const { proteinGoalG, fatGoalG, carbGoalG } = macrosForCalories(calorieGoal, weightKg);
 
   return {
     bmr: Math.round(bmrValue),

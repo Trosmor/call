@@ -18,7 +18,10 @@ const DEFAULT_PROFILE = {
   activityLevel: "sedentary", // sedentary | light | moderate | active | very_active
   goal: "maintain", // lose | maintain | gain
   goalRateKgPerWeek: 0.5,
-  beerSizeMl: 500 // last picked serving in the beer counter: 330 | 500
+  beerSizeMl: 500, // last picked serving in the beer counter: 330 | 500
+  // Share of Garmin's active calories added to the daily budget. The real-expenditure
+  // estimate measures how much of them is real and can recommend lowering this.
+  garminActivePct: 100
 };
 
 const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"];
@@ -184,6 +187,23 @@ export const Storage = {
       saveRoot(root);
     }
     return root.days[key];
+  },
+
+  /** Every stored day (read-only snapshot) — for the expenditure estimate. */
+  allDays() {
+    return loadRoot().days;
+  },
+
+  /**
+   * Marks a day as not fully logged, so the expenditure estimate skips it — a half-logged
+   * day reads as "ate little but didn't lose weight" and drags the number down.
+   */
+  setDayIncomplete(date, incomplete) {
+    const root = loadRoot();
+    const key = dateKey(date);
+    if (!root.days[key]) root.days[key] = emptyDay(key, root.profile);
+    root.days[key].incomplete = Boolean(incomplete);
+    saveRoot(root);
   },
 
   /** Read-only lookup of several days at once — null where none exists (getDay would create them). */

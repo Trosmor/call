@@ -112,6 +112,11 @@
 
         <section id="meal-list" class="meal-list"></section>
 
+        <label class="incomplete-toggle">
+          <input type="checkbox" id="day-incomplete" />
+          <span>День записан не полностью<small>Пропустить в расчёте реального расхода</small></span>
+        </label>
+
         <section id="water-card" class="card water-card">
           <div class="row-card">
             <div class="row-icon water" data-icon="droplet"></div>
@@ -171,7 +176,7 @@
             <div class="row-icon measure" data-icon="scale"></div>
             <div class="row-text">
               <div class="row-title">Measurements</div>
-              <div class="row-sub">Track progress, not vibes</div>
+              <div id="measurements-sub" class="row-sub">Track progress, not vibes</div>
             </div>
             <span class="chevron" data-icon="chevron-right"></span>
           </button>
@@ -250,6 +255,8 @@
           <label>Fat (g) <input id="goal-fat" type="number" step="5" /></label>
           <label>Carbs (g) <input id="goal-carb" type="number" step="5" /></label>
           <label>Water (ml) <input id="goal-water" type="number" step="100" /></label>
+          <label>Garmin active kcal (%) <input id="goal-garmin-pct" type="number" step="10" min="0" max="100" /></label>
+          <p class="hint">Какая доля активных калорий с часов добавляется к бюджету. Экран Measurements подскажет реальную долю, когда наберётся данных.</p>
         </section>
 
         <section class="card form-card">
@@ -307,9 +314,14 @@
             <button type="submit" class="primary-btn">Log</button>
           </form>
         </section>
+        <section id="expenditure-card" class="card expenditure-card">
+          <h2 class="card-title">Реальный расход</h2>
+          <div id="expenditure-body"></div>
+        </section>
         <section id="weight-chart-card" class="card hidden">
           <h2 class="card-title">Trend</h2>
           <div id="weight-chart"></div>
+          <p id="weight-chart-caption" class="hint"></p>
         </section>
         <section class="card">
           <h2 class="card-title">History</h2>

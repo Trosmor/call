@@ -1,11 +1,12 @@
 import { Storage } from "./storage.js";
 import { ClaudeClient, ClaudeAPIError } from "./claude.js";
-import { computeGoals, ACTIVITY_LABELS, GOAL_LABELS } from "./calc.js";
+import { computeGoals, bmr, dailyGoalAdjustment, macrosForCalories, ACTIVITY_LABELS, GOAL_LABELS } from "./calc.js";
+import { estimateExpenditure, garminShare, weightTrend, THRESHOLDS } from "./expenditure.js";
 import { Garmin } from "./garmin.js";
 import { icon, hydrateIcons } from "./icons.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-09-25.1";
+const APP_VERSION = "2026-09-25.2";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "sun" },
@@ -160,9 +161,20 @@ function renderWeekSelector() {
   });
 }
 
-/** Active kcal from Garmin for a date key — added on top of the day's goal. */
-function garminActiveCalories(dateKey) {
+/** Active kcal exactly as Garmin reported them for a date key. */
+function garminActiveRaw(dateKey) {
   return Math.round(Garmin.dayFor(dateKey)?.activeCalories || 0);
+}
+
+/** Share of Garmin's active kcal counted toward the budget (Settings / expenditure estimate). */
+function garminPct(profile = Storage.getProfile()) {
+  const pct = Number(profile.garminActivePct);
+  return Number.isFinite(pct) ? Math.min(Math.max(pct, 0), 100) : 100;
+}
+
+/** Garmin active kcal added on top of the day's goal — scaled by the counted share. */
+function garminActiveCalories(dateKey) {
+  return Math.round((garminActiveRaw(dateKey) * garminPct()) / 100);
 }
 
 /** The day's effective calorie budget, exactly as the Today screen shows it. */
@@ -208,8 +220,10 @@ function renderSummary(day, profile) {
   el("left-label").textContent = over ? "kcal over" : "kcal left";
   el("burned-value").textContent = activeCalories ? fmt(activeCalories) : "—";
   el("goal-value").textContent = fmt(goal);
+  const pct = garminPct(profile);
   el("calorie-goal-label").textContent = activeCalories
-    ? `Бюджет: ${fmt(goal - activeCalories)} цель + ${fmt(activeCalories)} активных с Garmin`
+    ? `Бюджет: ${fmt(goal - activeCalories)} цель + ${fmt(activeCalories)} активных с Garmin` +
+      (pct < 100 ? ` (${pct}% от ${fmt(garminActiveRaw(day.date))})` : "")
     : "";
 
   const ring = el("calorie-ring");
@@ -511,6 +525,27 @@ function renderBeer(day, profile) {
     : "";
 }
 
+/** "Day not fully logged" toggle + the weigh-in nudge on the Measurements row. */
+function renderDayMeta(day) {
+  el("day-incomplete").checked = Boolean(day.incomplete);
+  const todayKey = Storage.dateKey(new Date());
+  const trend = weightTrend(Storage.allMeasurements());
+  const todays = trend.find((p) => p.key === todayKey);
+  const last = trend[trend.length - 1];
+  const sub = el("measurements-sub");
+  if (todays) {
+    sub.textContent = `Сегодня ${todays.weight.toFixed(1)} kg · тренд ${todays.trend.toFixed(1)}`;
+    sub.className = "row-sub";
+  } else {
+    sub.textContent = last ? `Взвесься сегодня · тренд ${last.trend.toFixed(1)} kg` : "Взвесься сегодня — утром, до еды";
+    sub.className = "row-sub nudge";
+  }
+}
+
+el("day-incomplete").addEventListener("change", (e) => {
+  Storage.setDayIncomplete(state.selectedDate, e.target.checked);
+});
+
 function renderLoggingMealLabel() {
   const type = resolveDefaultMealType();
   el("logging-meal-label").textContent = `Logging to ${MEAL_META[type].label}`;
@@ -533,6 +568,7 @@ function renderAll() {
   renderWater(day);
   renderBeer(day, profile);
   renderWorkouts(day);
+  renderDayMeta(day);
   renderLoggingMealLabel();
 }
 
@@ -765,6 +801,7 @@ function loadSettingsForm() {
   el("goal-fat").value = profile.fatGoalG;
   el("goal-carb").value = profile.carbGoalG;
   el("goal-water").value = profile.waterGoalMl;
+  el("goal-garmin-pct").value = garminPct(profile);
   // Guarded: an unexpected value (e.g. from an old or hand-edited backup) used to throw here,
   // which aborted the whole click handler and made Settings impossible to open.
   const modelRadio =
@@ -835,6 +872,12 @@ el("btn-calc-goals").onclick = () => {
       waterGoalMl: parseInt(el("goal-water").value, 10) || 0
     });
   });
+});
+
+el("goal-garmin-pct").addEventListener("change", () => {
+  const pct = Math.min(Math.max(parseInt(el("goal-garmin-pct").value, 10) || 0, 0), 100);
+  el("goal-garmin-pct").value = pct;
+  Storage.saveProfile({ garminActivePct: pct });
 });
 
 document.querySelectorAll('input[name="theme"]').forEach((radio) => {
@@ -1257,7 +1300,7 @@ function resizeImageToBase64(file, maxDimension = 1024, quality = 0.7) {
 // ---------- measurements ----------
 
 function renderWeightChart() {
-  const points = Storage.allMeasurements(); // already sorted ascending by date
+  const points = weightTrend(Storage.allMeasurements()); // one point per day, with smoothed trend
   const card = el("weight-chart-card");
   if (points.length < 2) {
     card.classList.add("hidden");
@@ -1265,24 +1308,29 @@ function renderWeightChart() {
   }
   card.classList.remove("hidden");
 
-  const width = 320, height = 140, padLeft = 30, padRight = 8, padY = 14;
-  const weights = points.map((p) => num(p.weightKg));
-  const minW = Math.min(...weights), maxW = Math.max(...weights);
+  const width = 320, height = 150, padLeft = 30, padRight = 8, padY = 14;
+  const values = points.flatMap((p) => [p.weight, p.trend]);
+  const minW = Math.min(...values), maxW = Math.max(...values);
   const range = maxW - minW || 1;
+  const dayOf = (key) => {
+    const [y, m, d] = key.split("-").map(Number);
+    return new Date(y, m - 1, d).getTime();
+  };
+  const t0 = dayOf(points[0].key), t1 = dayOf(points[points.length - 1].key);
 
-  const xFor = (i) => padLeft + (i / (points.length - 1)) * (width - padLeft - padRight);
+  // X is proportional to time, so gaps between weigh-ins look like gaps.
+  const xFor = (key) => padLeft + ((dayOf(key) - t0) / (t1 - t0 || 1)) * (width - padLeft - padRight);
   const yFor = (w) => padY + (1 - (w - minW) / range) * (height - padY * 2);
 
-  const coords = weights.map((w, i) => [xFor(i), yFor(w)]);
-  const linePoints = coords.map(([x, y]) => `${x},${y}`).join(" ");
+  const trend = points.map((p) => [xFor(p.key), yFor(p.trend)]);
+  const trendLine = trend.map(([x, y]) => `${x},${y}`).join(" ");
   const areaPath =
-    `M${coords[0][0]},${height - padY} ` +
-    coords.map(([x, y]) => `L${x},${y}`).join(" ") +
-    ` L${coords[coords.length - 1][0]},${height - padY} Z`;
-  // Dots only while they're still distinguishable; a long history reads better as a line.
-  const dots = points.length <= 30
-    ? coords.map(([x, y]) => `<circle class="chart-dot" cx="${x}" cy="${y}" r="3"></circle>`).join("")
-    : `<circle class="chart-dot" cx="${coords[coords.length - 1][0]}" cy="${coords[coords.length - 1][1]}" r="3.5"></circle>`;
+    `M${trend[0][0]},${height - padY} ` + trend.map(([x, y]) => `L${x},${y}`).join(" ") +
+    ` L${trend[trend.length - 1][0]},${height - padY} Z`;
+  const dots = points
+    .map((p) => `<circle class="chart-raw" cx="${xFor(p.key)}" cy="${yFor(p.weight)}" r="2.5"></circle>`)
+    .join("");
+  const last = trend[trend.length - 1];
 
   el("weight-chart").innerHTML = `
     <svg class="weight-chart" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
@@ -1299,12 +1347,126 @@ function renderWeightChart() {
       <text class="chart-label" x="0" y="${padY + 3}">${maxW.toFixed(1)}</text>
       <text class="chart-label" x="0" y="${height - padY + 3}">${minW.toFixed(1)}</text>
       <path class="chart-area" d="${areaPath}"></path>
-      <polyline class="chart-line" points="${linePoints}"></polyline>
       ${dots}
+      <polyline class="chart-line" points="${trendLine}"></polyline>
+      <circle class="chart-dot" cx="${last[0]}" cy="${last[1]}" r="3.5"></circle>
     </svg>`;
+  const lastPoint = points[points.length - 1];
+  el("weight-chart-caption").textContent =
+    `Точки — взвешивания, линия — сглаженный тренд (${lastPoint.trend.toFixed(1)} kg). Скачки воды и соли тренд почти не двигают.`;
+}
+
+/** Runs the estimate on everything stored. */
+function currentExpenditure() {
+  return estimateExpenditure({
+    days: Storage.allDays(),
+    measurements: Storage.allMeasurements(),
+    totalsOf: (day) => Storage.totals(day),
+    garminActiveOf: garminActiveRaw
+  });
+}
+
+function renderExpenditureCard() {
+  const est = currentExpenditure();
+  const profile = Storage.getProfile();
+  const body = el("expenditure-body");
+
+  if (est.status === "collecting") {
+    const t = THRESHOLDS.preliminary;
+    const bar = (have, need) => Math.min(100, Math.round((have / need) * 100));
+    body.innerHTML = `
+      <div class="exp-title">Собираю данные</div>
+      <p class="hint">Нужно минимум ${t.foodDays} полностью записанных дней еды и ${t.weighIns} взвешиваний на отрезке от ${t.spanDays} дней. Сегодняшний день не считается — он ещё не закончен.</p>
+      <div class="exp-progress"><span>Дни с едой</span><b>${est.foodDays} / ${t.foodDays}</b></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${bar(est.foodDays, t.foodDays)}%"></div></div>
+      <div class="exp-progress"><span>Взвешивания</span><b>${est.weighIns} / ${t.weighIns}</b></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${bar(est.weighIns, t.weighIns)}%"></div></div>`;
+    return;
+  }
+
+  const haveProfile = profile.age && profile.heightCm && profile.weightKg;
+  const bmrValue = haveProfile ? bmr(profile) : null;
+  const formula = haveProfile ? computeGoals(profile).tdee : null;
+  const pct = garminPct(profile);
+  const share = garminShare(est.expenditure, bmrValue, est.avgActive);
+  const appAssumes = formula !== null ? Math.round(formula + (est.avgActive * pct) / 100) : null;
+  const trendText = est.slopeKgPerWeek === 0
+    ? "стоит на месте"
+    : `${est.slopeKgPerWeek > 0 ? "+" : "−"}${Math.abs(est.slopeKgPerWeek).toFixed(2)} kg/нед`;
+
+  let garminVerdict;
+  if (share === null) {
+    garminVerdict = est.avgActive < 100
+      ? "Активных калорий Garmin слишком мало, чтобы проверить их точность."
+      : "Заполни возраст, рост и вес в Настройках — без них не проверить Garmin.";
+  } else if (share >= 0.8) {
+    garminVerdict = `Калории Garmin близки к реальности (≈${Math.round(share * 100)}%). Учитывать их полностью — нормально.`;
+  } else {
+    garminVerdict = `Garmin завышает: реально подтверждается ≈${Math.round(share * 100)}% его активных калорий (в среднем ${fmt(est.avgActive)} в день).`;
+  }
+  // The usual culprit: an activity level above "sedentary" already includes movement, and
+  // Garmin's active calories then add it a second time.
+  if (appAssumes !== null && appAssumes - est.expenditure > 150) {
+    garminVerdict = `Бюджет был завышен примерно на ${fmt(appAssumes - est.expenditure)} ккал в день` +
+      (est.avgActive && profile.activityLevel !== "sedentary"
+        ? " — активность в профиле уже учитывает движение, а Garmin добавлял его ещё раз. "
+        : ". ") + garminVerdict;
+  } else if (appAssumes !== null && est.expenditure - appAssumes > 150) {
+    garminVerdict = `Ты тратишь примерно на ${fmt(est.expenditure - appAssumes)} ккал в день больше, чем закладывало приложение. ` + garminVerdict;
+  }
+  if (share !== null && est.status !== "ready") {
+    garminVerdict += " Пока грубо — долю Garmin предложу поменять, когда оценка станет надёжной.";
+  }
+
+  // Suggested goal: real expenditure minus the Garmin share that will be added on top daily,
+  // then the deficit for the profile's target rate — never below BMR.
+  // The Garmin share is noisy (±150 kcal of error over ~600 active kcal) — only act on it
+  // once the estimate is reliable; before that the goal is suggested with the current share.
+  const newPct = share === null || est.status !== "ready" ? pct : Math.round(share * 100);
+  const base = est.expenditure - (est.avgActive * newPct) / 100;
+  let suggested = Math.round((base + dailyGoalAdjustment(profile)) / 10) * 10;
+  if (bmrValue) suggested = Math.max(suggested, Math.round(bmrValue / 10) * 10);
+  const changes = suggested !== profile.dailyCalorieGoal || newPct !== pct;
+
+  body.innerHTML = `
+    <div class="exp-head">
+      <div>
+        <div class="exp-num">${fmt(est.expenditure)}<small>kcal/день</small></div>
+        <div class="hint">Реальный расход по твоим данным</div>
+      </div>
+      <span class="exp-badge ${est.status}">${est.status === "ready" ? "надёжно" : "предварительно"}</span>
+    </div>
+    ${est.plausible ? "" : `<p class="hint warn">Число выглядит неправдоподобно — похоже, часть еды не записана. Отметь неполные дни на главном экране.</p>`}
+    <div class="exp-rows">
+      <div><span>Ел в среднем</span><b>${fmt(est.avgIntake)} kcal</b></div>
+      <div><span>Тренд веса</span><b>${trendText}</b></div>
+      ${formula !== null ? `<div><span>Формула по профилю</span><b>${fmt(formula)} kcal</b></div>` : ""}
+      ${appAssumes !== null && est.avgActive ? `<div><span>Приложение закладывало</span><b>${fmt(appAssumes)} kcal</b></div>` : ""}
+    </div>
+    <p class="exp-verdict">${garminVerdict}</p>
+    <p class="hint">По ${est.foodDays} дням еды и ${est.weighIns} взвешиваниям за ${est.spanDays} дн. Чем больше данных, тем точнее.</p>
+    ${est.plausible && changes ? `
+      <div class="exp-suggest">
+        <div>Новая цель: <b>${fmt(suggested)} kcal</b>${newPct !== pct ? ` + ${newPct}% калорий Garmin` : ""}</div>
+        <div class="hint">Сейчас: ${fmt(profile.dailyCalorieGoal)} kcal + ${pct}% Garmin. Учтён темп из профиля.</div>
+        <button id="btn-apply-expenditure" class="primary-btn">Применить</button>
+      </div>` : ""}`;
+
+  const apply = el("btn-apply-expenditure");
+  if (apply) {
+    apply.onclick = () => {
+      Storage.saveProfile({
+        dailyCalorieGoal: suggested,
+        garminActivePct: newPct,
+        ...macrosForCalories(suggested, profile.weightKg)
+      });
+      renderMeasurements();
+    };
+  }
 }
 
 function renderMeasurements() {
+  renderExpenditureCard();
   renderWeightChart();
   const list = el("measurement-list");
   const measurements = [...Storage.allMeasurements()].reverse();
@@ -1334,6 +1496,7 @@ el("measurement-form").addEventListener("submit", (e) => {
   Storage.addMeasurement(weight);
   input.value = "";
   renderMeasurements();
+  renderAll();
 });
 
 // ---------- reports ----------
