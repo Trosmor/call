@@ -357,12 +357,12 @@
     <dialog id="search-dialog" class="sheet">
       <div class="grabber"></div>
       <div class="sheet-header">
-        <h2>Search</h2>
+        <h2>Add food</h2>
         <button id="btn-close-search" class="icon-btn small" aria-label="Close" data-icon="x"></button>
       </div>
       <div class="search-field">
         <span data-icon="search"></span>
-        <input id="search-input" type="text" placeholder="Search previous foods..." />
+        <input id="search-input" type="text" placeholder="Мои продукты и недавние…" />
       </div>
       <ul id="search-results" class="search-results"></ul>
     </dialog>
@@ -381,7 +381,13 @@
         <label class="field third">Protein <input id="create-protein" type="number" step="any" /></label>
         <label class="field third">Fat <input id="create-fat" type="number" step="any" /></label>
         <label class="field third">Carbs <input id="create-carb" type="number" step="any" /></label>
+        <label id="save-library-row" class="save-library full">
+          <input type="checkbox" id="create-save-library" />
+          <span id="save-library-label">Сохранить в «Мои продукты»</span>
+        </label>
         <button type="submit" id="create-submit-btn" class="primary-btn full">Add</button>
+        <button type="button" id="btn-copy-to-today" class="primary-btn secondary full hidden">Copy to today</button>
+        <button type="button" id="btn-delete-library" class="primary-btn danger full hidden">Delete from My foods</button>
       </form>
     </dialog>
 

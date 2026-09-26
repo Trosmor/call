@@ -94,7 +94,7 @@ function copyItemsInto(source, target) {
 function loadRoot() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
-    const root = { profile: { ...DEFAULT_PROFILE }, days: {}, measurements: [], lastReport: null };
+    const root = { profile: { ...DEFAULT_PROFILE }, days: {}, measurements: [], lastReport: null, library: [] };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(root));
     return root;
   }
@@ -103,6 +103,7 @@ function loadRoot() {
   parsed.days = parsed.days || {};
   parsed.measurements = parsed.measurements || [];
   parsed.lastReport = parsed.lastReport || null;
+  parsed.library = Array.isArray(parsed.library) ? parsed.library : [];
   return parsed;
 }
 
@@ -332,6 +333,56 @@ export const Storage = {
     return root.days[key];
   },
 
+  // ---------- "My foods" library ----------
+  // Saved products with a default portion, logged from the Search sheet without any AI call.
+
+  libraryAll() {
+    return [...loadRoot().library].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  },
+
+  /** Adds a product, or updates the one with the same name (case-insensitive). */
+  saveToLibrary(values) {
+    const root = loadRoot();
+    const name = String(values.name || "").trim();
+    if (!name) return null;
+    const entry = {
+      name,
+      grams: toNum(values.grams),
+      kcal: Math.round(toNum(values.kcal)),
+      proteinG: toNum(values.proteinG),
+      fatG: toNum(values.fatG),
+      carbG: toNum(values.carbG),
+      updatedAt: new Date().toISOString()
+    };
+    const existing = root.library.find((i) => i.name.toLowerCase() === name.toLowerCase());
+    if (existing) Object.assign(existing, entry);
+    else root.library.push({ id: crypto.randomUUID(), ...entry });
+    saveRoot(root);
+    return existing || root.library[root.library.length - 1];
+  },
+
+  updateLibraryItem(id, values) {
+    const root = loadRoot();
+    const item = root.library.find((i) => i.id === id);
+    if (!item) return;
+    Object.assign(item, {
+      name: String(values.name || item.name).trim(),
+      grams: toNum(values.grams),
+      kcal: Math.round(toNum(values.kcal)),
+      proteinG: toNum(values.proteinG),
+      fatG: toNum(values.fatG),
+      carbG: toNum(values.carbG),
+      updatedAt: new Date().toISOString()
+    });
+    saveRoot(root);
+  },
+
+  deleteLibraryItem(id) {
+    const root = loadRoot();
+    root.library = root.library.filter((i) => i.id !== id);
+    saveRoot(root);
+  },
+
   /** All previously logged food items, most recent first — backs the "Search" picker. */
   allFoodItemsHistory() {
     const root = loadRoot();
@@ -559,7 +610,8 @@ export const Storage = {
       profile: { ...DEFAULT_PROFILE, ...parsed.profile },
       days: parsed.days || {},
       measurements: parsed.measurements || [],
-      lastReport: parsed.lastReport || null
+      lastReport: parsed.lastReport || null,
+      library: Array.isArray(parsed.library) ? parsed.library : []
     };
     saveRoot(root);
     return root;

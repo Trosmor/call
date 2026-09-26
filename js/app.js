@@ -6,7 +6,7 @@ import { Garmin } from "./garmin.js";
 import { icon, hydrateIcons } from "./icons.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-09-25.2";
+const APP_VERSION = "2026-09-26.1";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "sun" },
@@ -49,6 +49,8 @@ const state = {
   openMeals: new Set(["breakfast"]),
   activeMealTypeForDialog: "breakfast",
   editingItemId: null, // non-null while create-dialog is repurposed for editing an existing item
+  dialogMode: "create", // create | edit | add-from | library-edit — see showFoodDialog
+  portionSource: null, // the My foods / recent product the portion or library sheet is about
   dialogBase: null, // original grams/kcal/macros snapshot, used to scale macros when grams changes
   ratingInFlight: new Set(), // "YYYY-MM-DD:mealType" keys with a rating request pending
   loggingBusy: false, // a photo/text logging request is in flight
@@ -476,7 +478,7 @@ function mealCardHTML(day, type) {
         ${items.length ? `<div class="food-list">${rows}</div>` : ""}
         ${ratingBlock}
         <div class="meal-actions">
-          <button class="chip-btn solid" data-search-meal="${type}">${icon("search")}Search</button>
+          <button class="chip-btn solid" data-search-meal="${type}">${icon("star")}My foods</button>
           <button class="chip-btn" data-create-meal="${type}">${icon("pencil")}Create</button>
           ${
             items.length
@@ -572,62 +574,105 @@ function renderAll() {
   renderLoggingMealLabel();
 }
 
-// ---------- dialogs: search & create ----------
+// ---------- dialogs: add food (My foods + recent) & create/edit ----------
+//
+// One create-dialog serves five modes (state.dialogMode):
+//   create        — new product typed by hand
+//   edit          — a logged item of the selected day
+//   add-from      — portion sheet for a My foods / recent product (grams rescale everything)
+//   library-edit  — change or delete a saved My foods product
 
 function openSearchDialog(mealType) {
   state.activeMealTypeForDialog = mealType;
-  const dialog = el("search-dialog");
   const input = el("search-input");
   input.value = "";
   renderSearchResults("");
   input.oninput = () => renderSearchResults(input.value);
-  dialog.showModal();
+  el("search-dialog").showModal();
 }
 
 function renderSearchResults(query) {
   const list = el("search-results");
-  // Items are addressed by index into state.searchResults — serializing them as JSON into an
-  // HTML attribute broke on names containing "&" sequences the parser treats as entities.
-  state.searchResults = Storage.allFoodItemsHistory()
-    .filter((i) => (query ? i.name.toLowerCase().includes(query.toLowerCase()) : true))
+  const q = query.trim().toLowerCase();
+  const matches = (item) => !q || item.name.toLowerCase().includes(q);
+  const library = Storage.libraryAll();
+  const libraryNames = new Set(library.map((i) => i.name.toLowerCase()));
+  const mine = library.filter(matches).map((i) => ({ ...i, fromLibrary: true }));
+  // Recent = history minus anything already saved, so a product never shows up twice.
+  const recent = Storage.allFoodItemsHistory()
+    .filter((i) => matches(i) && !libraryNames.has(i.name.toLowerCase()))
     .slice(0, 30);
-  list.innerHTML =
-    state.searchResults
-      .map(
-        (item, idx) => `<li data-result-index="${idx}">
-        <div class="search-result-text">
-          <div class="search-result-name">${escapeHtml(item.name)}</div>
-          <div class="search-result-sub">${Math.round(item.grams)} g · ${fmt(item.kcal)} kcal</div>
-        </div>
-        <span class="search-add">${icon("plus")}</span>
-      </li>`
-      )
-      .join("") ||
-    `<li class="search-empty">${query ? "Ничего не нашлось" : "Здесь появятся продукты, которые ты уже записывал"}</li>`;
+  // Rows are addressed by index into state.searchResults — serializing items into HTML
+  // attributes broke on names containing "&" sequences the parser treats as entities.
+  state.searchResults = [...mine, ...recent];
+
+  const row = (item, idx) => `<li data-result-index="${idx}">
+      ${item.fromLibrary ? `<span class="search-star">${icon("star")}</span>` : ""}
+      <div class="search-result-text">
+        <div class="search-result-name">${escapeHtml(item.name)}</div>
+        <div class="search-result-sub">${Math.round(num(item.grams))} g · ${fmt(item.kcal)} kcal</div>
+      </div>
+      ${item.fromLibrary ? `<button class="search-edit" aria-label="Edit" data-edit-library="${idx}">${icon("pencil")}</button>` : ""}
+      <span class="search-add">${icon("plus")}</span>
+    </li>`;
+
+  let html = "";
+  if (mine.length) {
+    html += `<li class="search-section">★ Мои продукты</li>` + mine.map((item, i) => row(item, i)).join("");
+  } else if (!q) {
+    html += `<li class="search-hint">Сохраняй частые продукты: открой продукт в дневнике или создай новый и включи «Сохранить в Мои продукты». Потом они добавляются отсюда без AI.</li>`;
+  }
+  if (recent.length) {
+    html += `<li class="search-section">Недавние</li>` + recent.map((item, i) => row(item, mine.length + i)).join("");
+  }
+  if (!mine.length && !recent.length && q) html += `<li class="search-empty">Ничего не нашлось</li>`;
+  list.innerHTML = html;
+
   list.querySelectorAll("li[data-result-index]").forEach((li) => {
     li.onclick = () => {
       const item = state.searchResults[Number(li.dataset.resultIndex)];
-      if (!item) return;
-      Storage.addFoodItem(state.selectedDate, state.activeMealTypeForDialog, {
-        ...item,
-        source: "search"
-      });
-      el("search-dialog").close();
-      renderAll();
+      if (item) openPortionDialog(item);
+    };
+  });
+  list.querySelectorAll("[data-edit-library]").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const item = state.searchResults[Number(btn.dataset.editLibrary)];
+      if (item) openLibraryEditDialog(item);
     };
   });
 }
 
 el("btn-close-search").onclick = () => el("search-dialog").close();
 
+/** Fills the create-dialog and configures its extra controls for the given mode. */
+function showFoodDialog({ mode, title, submit, values = null, base = null, saveLabel = null, saveChecked = false }) {
+  state.dialogMode = mode;
+  state.dialogBase = base; // original values, used to scale everything when grams change
+  el("create-form").reset();
+  if (values) {
+    el("create-name").value = values.name;
+    el("create-grams").value = round1(num(values.grams));
+    el("create-kcal").value = Math.round(num(values.kcal));
+    el("create-protein").value = round1(num(values.proteinG));
+    el("create-fat").value = round1(num(values.fatG));
+    el("create-carb").value = round1(num(values.carbG));
+  }
+  el("create-dialog-title").textContent = title;
+  el("create-submit-btn").textContent = submit;
+  el("save-library-row").classList.toggle("hidden", !saveLabel);
+  el("save-library-label").textContent = saveLabel || "";
+  el("create-save-library").checked = saveChecked;
+  const viewingOtherDay = Storage.dateKey(state.selectedDate) !== Storage.dateKey(new Date());
+  el("btn-copy-to-today").classList.toggle("hidden", !(mode === "edit" && viewingOtherDay));
+  el("btn-delete-library").classList.toggle("hidden", mode !== "library-edit");
+  el("create-dialog").showModal();
+}
+
 function openCreateDialog(mealType) {
   state.activeMealTypeForDialog = mealType;
   state.editingItemId = null;
-  state.dialogBase = null; // nothing to scale from yet — user is entering fresh values
-  el("create-form").reset();
-  el("create-dialog-title").textContent = "Create";
-  el("create-submit-btn").textContent = "Add";
-  el("create-dialog").showModal();
+  showFoodDialog({ mode: "create", title: "Create", submit: "Add", saveLabel: "Сохранить в «Мои продукты»" });
 }
 
 function openEditDialog(day, mealType, itemId) {
@@ -637,16 +682,33 @@ function openEditDialog(day, mealType, itemId) {
   state.editingItemId = itemId;
   // Snapshot at open time, so scaling multiple grams edits in one sitting is always
   // relative to the original values, not compounding rounding from a previous scale.
-  state.dialogBase = { grams: item.grams, kcal: item.kcal, proteinG: item.proteinG, fatG: item.fatG, carbG: item.carbG };
-  el("create-name").value = item.name;
-  el("create-grams").value = item.grams;
-  el("create-kcal").value = item.kcal;
-  el("create-protein").value = item.proteinG;
-  el("create-fat").value = item.fatG;
-  el("create-carb").value = item.carbG;
-  el("create-dialog-title").textContent = "Edit";
-  el("create-submit-btn").textContent = "Save";
-  el("create-dialog").showModal();
+  showFoodDialog({
+    mode: "edit",
+    title: "Edit",
+    submit: "Save",
+    values: item,
+    base: { ...item },
+    saveLabel: "Сохранить в «Мои продукты»"
+  });
+}
+
+/** Portion sheet: pick a saved or recent product, adjust grams, add — no AI call. */
+function openPortionDialog(item) {
+  state.editingItemId = null;
+  state.portionSource = item;
+  showFoodDialog({
+    mode: "add-from",
+    title: `Add to ${MEAL_META[state.activeMealTypeForDialog].label}`,
+    submit: "Add",
+    values: item,
+    base: { ...item },
+    saveLabel: item.fromLibrary ? "Обновить в «Мои продукты»" : "Сохранить в «Мои продукты»"
+  });
+}
+
+function openLibraryEditDialog(item) {
+  state.portionSource = item;
+  showFoodDialog({ mode: "library-edit", title: "My food", submit: "Save", values: item, base: { ...item } });
 }
 
 el("btn-close-create").onclick = () => el("create-dialog").close();
@@ -655,39 +717,78 @@ el("btn-close-create").onclick = () => el("create-dialog").close();
 // calorie tracker — editing grams alone used to silently leave "Left" unchanged.
 el("create-grams").addEventListener("input", () => {
   const base = state.dialogBase;
-  if (!base || !base.grams) return;
+  if (!base || !num(base.grams)) return;
   const newGrams = parseFloat(el("create-grams").value);
   if (!newGrams || newGrams <= 0) return;
-  const ratio = newGrams / base.grams;
-  el("create-kcal").value = Math.round(base.kcal * ratio);
-  el("create-protein").value = round1(base.proteinG * ratio);
-  el("create-fat").value = round1(base.fatG * ratio);
-  el("create-carb").value = round1(base.carbG * ratio);
+  const ratio = newGrams / num(base.grams);
+  el("create-kcal").value = Math.round(num(base.kcal) * ratio);
+  el("create-protein").value = round1(num(base.proteinG) * ratio);
+  el("create-fat").value = round1(num(base.fatG) * ratio);
+  el("create-carb").value = round1(num(base.carbG) * ratio);
 });
 
 function round1(n) {
   return Math.round(n * 10) / 10;
 }
 
-el("create-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const values = {
-    name: el("create-name").value,
+function dialogValues() {
+  return {
+    name: el("create-name").value.trim(),
     grams: parseFloat(el("create-grams").value) || 0,
     kcal: Math.round(parseFloat(el("create-kcal").value)) || 0,
     proteinG: parseFloat(el("create-protein").value) || 0,
     fatG: parseFloat(el("create-fat").value) || 0,
     carbG: parseFloat(el("create-carb").value) || 0
   };
-  if (state.editingItemId) {
-    Storage.editFoodItem(state.selectedDate, state.activeMealTypeForDialog, state.editingItemId, values);
-  } else {
-    Storage.addFoodItem(state.selectedDate, state.activeMealTypeForDialog, { ...values, source: "manual" });
+}
+
+el("create-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const values = dialogValues();
+  const mode = state.dialogMode;
+
+  if (mode === "library-edit") {
+    Storage.updateLibraryItem(state.portionSource.id, values);
+    el("create-dialog").close();
+    renderSearchResults(el("search-input").value);
+    return;
   }
+
+  const mealType = state.activeMealTypeForDialog;
+  if (mode === "edit") {
+    Storage.editFoodItem(state.selectedDate, mealType, state.editingItemId, values);
+  } else {
+    Storage.addFoodItem(state.selectedDate, mealType, { ...values, source: mode === "add-from" ? "library" : "manual" });
+  }
+  const saved = !el("save-library-row").classList.contains("hidden") && el("create-save-library").checked;
+  if (saved) Storage.saveToLibrary(values);
+
   state.editingItemId = null;
   el("create-dialog").close();
+  if (el("search-dialog").open) el("search-dialog").close();
+  if (saved) setLoggingFeedback(`★ ${values.name} — в «Моих продуктах».`, "success");
   renderAll();
 });
+
+// Copies the item being viewed on another day into today's same meal (with any edits made
+// in the sheet) — "yesterday's ice cream again" without retyping or an AI call.
+el("btn-copy-to-today").onclick = () => {
+  const values = dialogValues();
+  const mealType = state.activeMealTypeForDialog;
+  Storage.addFoodItem(new Date(), mealType, { ...values, source: "copy" });
+  if (el("create-save-library").checked) Storage.saveToLibrary(values);
+  el("create-dialog").close();
+  setLoggingFeedback(`Скопировано на сегодня: ${values.name} → ${MEAL_META[mealType].label}.`, "success");
+  renderAll();
+};
+
+el("btn-delete-library").onclick = () => {
+  const item = state.portionSource;
+  if (!item || !window.confirm(`Удалить «${item.name}» из «Моих продуктов»? Записи в дневнике останутся.`)) return;
+  Storage.deleteLibraryItem(item.id);
+  el("create-dialog").close();
+  renderSearchResults(el("search-input").value);
+};
 
 // ---------- repeat yesterday ----------
 

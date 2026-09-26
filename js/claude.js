@@ -48,6 +48,7 @@ const SYSTEM_PROMPT = `Ты — модуль распознавания еды �
 - Если на фото несколько продуктов — верни несколько элементов items (action всегда "add" для фото, already_logged для фото не передаётся).
 - Граммовку и БЖУ оценивай по стандартным справочным значениям на 100г для похожих продуктов, если точный вес не указан — оцени по объёму/визуальному размеру порции.
 - Если пользователь пишет что-то вроде "как есть, бинж-день на 4000 ккал" — создай один item с этим названием и суммарной калорийностью, БЖУ оцени пропорционально типичному соотношению.
+- Внутри строковых значений не используй прямые двойные кавычки " — если нужно, пиши «ёлочки».
 - Никакого текста вне JSON.`;
 
 // Separate system prompt for the Reports screen — a narrative nutrition/training
@@ -90,7 +91,56 @@ const MEAL_RATING_SYSTEM_PROMPT = `Ты — персональный нутри�
   "comment": "string, 2-4 предложения на русском: что было хорошо, что не так, и конкретный совет как улучшить именно этот приём пищи в следующий раз"
 }
 
-Пиши по делу, без общих фраз ("следите за питанием"), комментарий должен быть про конкретные продукты из списка. Никакого текста вне JSON.`;
+Пиши по делу, без общих фраз («следите за питанием»), комментарий должен быть про конкретные продукты из списка.
+Названия продуктов внутри comment бери в «ёлочки», НИКОГДА не используй внутри строк прямые двойные кавычки ". Никакого текста вне JSON.`;
+
+// JSON Schemas for Claude structured outputs (output_config.format). With a schema the API
+// guarantees parseable JSON — the "вернул не-JSON ответ" errors came from free-form output,
+// typically a product name in straight quotes inside "comment". All objects need
+// additionalProperties:false; numeric/length constraints are not supported, so none are used.
+const nullable = (schema) => ({ anyOf: [schema, { type: "null" }] });
+const MEAL_TYPE_ENUM = { type: "string", enum: ["breakfast", "lunch", "dinner", "snack"] };
+
+const FOOD_SCHEMA = {
+  type: "object",
+  properties: {
+    action: { type: "string", enum: ["add", "edit", "delete"] },
+    target_name: nullable({ type: "string" }),
+    target_meal_type: nullable(MEAL_TYPE_ENUM),
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          grams: { type: "number" },
+          kcal: { type: "number" },
+          protein_g: { type: "number" },
+          fat_g: { type: "number" },
+          carb_g: { type: "number" }
+        },
+        required: ["name", "grams", "kcal", "protein_g", "fat_g", "carb_g"],
+        additionalProperties: false
+      }
+    },
+    meal_type: nullable(MEAL_TYPE_ENUM),
+    is_water: { type: "boolean" },
+    water_ml: nullable({ type: "number" }),
+    confidence_note: nullable({ type: "string" })
+  },
+  required: ["action", "target_name", "target_meal_type", "items", "meal_type", "is_water", "water_ml", "confidence_note"],
+  additionalProperties: false
+};
+
+const RATING_SCHEMA = {
+  type: "object",
+  properties: {
+    score: { type: "integer" },
+    comment: { type: "string" }
+  },
+  required: ["score", "comment"],
+  additionalProperties: false
+};
 
 // Selectable models. Claude goes straight to Anthropic (which allows browser calls via the
 // dangerous-direct-browser-access header). GLM goes through OpenRouter: Z.ai's own API sends
@@ -192,7 +242,7 @@ function toOpenRouterContent(userContent) {
 }
 
 /** Provider-specific URL, headers and body for one request. */
-function buildRequest(route, systemPrompt, userContent, kind, jsonOutput) {
+function buildRequest(route, systemPrompt, userContent, kind, jsonOutput, schema) {
   if (route.provider === "openrouter") {
     return {
       url: OPENROUTER_ENDPOINT,
@@ -229,7 +279,8 @@ function buildRequest(route, systemPrompt, userContent, kind, jsonOutput) {
       model: route.id,
       max_tokens: MAX_TOKENS[kind],
       system: systemPrompt,
-      messages: [{ role: "user", content: userContent }]
+      messages: [{ role: "user", content: userContent }],
+      ...(schema ? { output_config: { format: { type: "json_schema", schema } } } : {})
     }
   };
 }
@@ -269,11 +320,13 @@ function parseFoodResponse(rawText, route) {
  * buttons stuck until reload) and up to 2 automatic retries on transient failures
  * (overloaded / rate limited / 5xx / dropped connection). Works for both providers.
  */
-async function send(route, systemPrompt, userContent, kind, { jsonOutput = false } = {}) {
+async function send(route, systemPrompt, userContent, kind, { jsonOutput = false, schema = null } = {}) {
   if (!route.apiKey) throw new ClaudeAPIError(ClaudeClient.missingKeyMessage(route));
 
-  const req = buildRequest(route, systemPrompt, userContent, kind, jsonOutput);
-  const body = JSON.stringify(req.body);
+  // Schemas are enforced on the Anthropic side only; OpenRouter/GLM keeps plain JSON mode.
+  let useSchema = Boolean(schema) && route.provider === "anthropic";
+  let req = buildRequest(route, systemPrompt, userContent, kind, jsonOutput, useSchema ? schema : null);
+  let body = JSON.stringify(req.body);
   const who = PROVIDER_LABEL[route.provider];
 
   let lastError = null;
@@ -284,6 +337,15 @@ async function send(route, systemPrompt, userContent, kind, { jsonOutput = false
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS[kind]);
     try {
       const response = await fetch(req.url, { method: "POST", headers: req.headers, body, signal: controller.signal });
+      if (!response.ok && response.status === 400 && useSchema) {
+        // Safety net: if the schema itself is ever rejected, fall back to the old free-form
+        // JSON path (tolerant parser) instead of breaking logging/rating entirely.
+        useSchema = false;
+        req = buildRequest(route, systemPrompt, userContent, kind, jsonOutput, null);
+        body = JSON.stringify(req.body);
+        attempt--;
+        continue;
+      }
       if (!response.ok) {
         const err = await apiError(response, route);
         if (!RETRYABLE_STATUSES.has(response.status)) throw err;
@@ -327,7 +389,7 @@ export const ClaudeClient = {
     const { text } = await send(route, SYSTEM_PROMPT, [
       { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
       { type: "text", text: "Распознай еду на фото и верни JSON по схеме." }
-    ], "logging", { jsonOutput: true });
+    ], "logging", { jsonOutput: true, schema: FOOD_SCHEMA });
     return parseFoodResponse(text, route);
   },
 
@@ -341,7 +403,7 @@ export const ClaudeClient = {
     const content = hasContext
       ? `${text}\n\nalready_logged: ${JSON.stringify(alreadyLoggedByMeal)}`
       : text;
-    const { text: raw } = await send(route, SYSTEM_PROMPT, [{ type: "text", text: content }], "logging", { jsonOutput: true });
+    const { text: raw } = await send(route, SYSTEM_PROMPT, [{ type: "text", text: content }], "logging", { jsonOutput: true, schema: FOOD_SCHEMA });
     return parseFoodResponse(raw, route);
   },
 
@@ -366,7 +428,7 @@ export const ClaudeClient = {
       MEAL_RATING_SYSTEM_PROMPT,
       [{ type: "text", text: JSON.stringify(payload) }],
       "rating",
-      { jsonOutput: true }
+      { jsonOutput: true, schema: RATING_SCHEMA }
     );
     let parsed;
     try {
