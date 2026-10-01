@@ -1,19 +1,35 @@
 {
-  "syncedAt": "2026-09-30T21:55:25.192448+00:00",
+  "syncedAt": "2026-10-01T01:05:15.253928+00:00",
   "days": [
     {
+      "date": "2026-10-01",
+      "steps": null,
+      "activeCalories": 0.0,
+      "totalCalories": 111.0,
+      "restingHeartRate": 67,
+      "sleepHours": null,
+      "sleepScore": null,
+      "hrvLastNightAvg": null,
+      "hrvStatus": null,
+      "avgStressLevel": 35,
+      "bodyBatteryHigh": 10,
+      "bodyBatteryLow": 6,
+      "weightKg": null,
+      "activities": []
+    },
+    {
       "date": "2026-09-30",
-      "steps": 3837,
-      "activeCalories": 295.0,
-      "totalCalories": 2421.0,
+      "steps": 3877,
+      "activeCalories": 312.0,
+      "totalCalories": 2614.0,
       "restingHeartRate": 61,
       "sleepHours": 7.0,
       "sleepScore": null,
       "hrvLastNightAvg": 33,
       "hrvStatus": "BALANCED",
-      "avgStressLevel": 34,
+      "avgStressLevel": 36,
       "bodyBatteryHigh": 68,
-      "bodyBatteryLow": 12,
+      "bodyBatteryLow": 6,
       "weightKg": null,
       "activities": [
         {
@@ -232,30 +248,6 @@
       "bodyBatteryLow": 5,
       "weightKg": null,
       "activities": []
-    },
-    {
-      "date": "2026-09-17",
-      "steps": 2451,
-      "activeCalories": 989.0,
-      "totalCalories": 3291.0,
-      "restingHeartRate": 60,
-      "sleepHours": 6.8,
-      "sleepScore": null,
-      "hrvLastNightAvg": 34,
-      "hrvStatus": "BALANCED",
-      "avgStressLevel": 34,
-      "bodyBatteryHigh": 78,
-      "bodyBatteryLow": 5,
-      "weightKg": null,
-      "activities": [
-        {
-          "name": "Leiria Велосипед",
-          "type": "cycling",
-          "durationMin": 105.8,
-          "calories": 740.0,
-          "avgHeartRate": 139.0
-        }
-      ]
     }
   ]
 }
