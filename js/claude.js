@@ -142,6 +142,37 @@ const RATING_SCHEMA = {
   additionalProperties: false
 };
 
+const WORKOUT_SYSTEM_PROMPT = `Ты разбираешь короткую запись домашней силовой тренировки (набрана или надиктована по-русски).
+Тебе дают текст пользователя и список упражнений (exercise_id, название, единица: reps — повторы, sec — секунды).
+Сопоставь сказанное с упражнениями по смыслу ("подтягивался" → pullup, "присед" → squat, "мост" → glute, "планка минута" → plank 60).
+Для каждого упомянутого упражнения верни массив чисел по подходам в порядке выполнения:
+- "4, 4, 3" → [4, 4, 3]; "3 по 15" / "3x15" / "три подхода по 15" → [15, 15, 15];
+- для sec переводи минуты в секунды ("полторы минуты" → 90);
+- "по 8 на ногу" — просто 8 на подход.
+Не выдумывай подходы, которых не было. Всё, что не удалось сопоставить, кратко перечисли в unmatched (иначе null).
+Верни только JSON по схеме.`;
+
+const WORKOUT_SCHEMA_FOR = (ids) => ({
+  type: "object",
+  properties: {
+    entries: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          exercise_id: { type: "string", enum: ids },
+          sets: { type: "array", items: { type: "number" } }
+        },
+        required: ["exercise_id", "sets"],
+        additionalProperties: false
+      }
+    },
+    unmatched: { anyOf: [{ type: "string" }, { type: "null" }] }
+  },
+  required: ["entries", "unmatched"],
+  additionalProperties: false
+});
+
 // Selectable models. Claude goes straight to Anthropic (which allows browser calls via the
 // dangerous-direct-browser-access header). GLM goes through OpenRouter: Z.ai's own API sends
 // no CORS headers, so a browser can't call it directly; OpenRouter does allow browser calls.
@@ -405,6 +436,33 @@ export const ClaudeClient = {
       : text;
     const { text: raw } = await send(route, SYSTEM_PROMPT, [{ type: "text", text: content }], "logging", { jsonOutput: true, schema: FOOD_SCHEMA });
     return parseFoodResponse(raw, route);
+  },
+
+  /**
+   * Turns a dictated workout ("подтягивания 4, 4, 3, тяга резинки 3 по 15") into
+   * { entries: [{ exercise_id, sets: number[] }], unmatched }. `exercises` = [{ id, name, unit }].
+   */
+  async parseWorkout(route, text, exercises) {
+    const ids = exercises.map((e) => e.id);
+    const payload = { text, exercises };
+    const { text: raw } = await send(
+      route,
+      WORKOUT_SYSTEM_PROMPT,
+      [{ type: "text", text: JSON.stringify(payload) }],
+      "rating",
+      { jsonOutput: true, schema: WORKOUT_SCHEMA_FOR(ids) }
+    );
+    let parsed;
+    try {
+      parsed = extractJsonObject(raw);
+    } catch (e) {
+      throw new ClaudeAPIError(`${route.name} вернул не-JSON ответ при разборе тренировки. Попробуй ещё раз.`);
+    }
+    const entries = (Array.isArray(parsed.entries) ? parsed.entries : [])
+      .filter((e) => ids.includes(e.exercise_id) && Array.isArray(e.sets))
+      .map((e) => ({ exercise_id: e.exercise_id, sets: e.sets.map(Number).filter((n) => Number.isFinite(n) && n > 0) }))
+      .filter((e) => e.sets.length);
+    return { entries, unmatched: parsed.unmatched || null };
   },
 
   /**

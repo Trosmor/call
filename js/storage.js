@@ -21,7 +21,9 @@ const DEFAULT_PROFILE = {
   beerSizeMl: 500, // last picked serving in the beer counter: 330 | 500
   // Share of Garmin's active calories added to the daily budget. The real-expenditure
   // estimate measures how much of them is real and can recommend lowering this.
-  garminActivePct: 100
+  garminActivePct: 100,
+  // Current difficulty level per home-training exercise (index into its levels list).
+  trainingLevels: {}
 };
 
 const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"];
@@ -205,6 +207,66 @@ export const Storage = {
     if (!root.days[key]) root.days[key] = emptyDay(key, root.profile);
     root.days[key].incomplete = Boolean(incomplete);
     saveRoot(root);
+  },
+
+  // ---------- home training ----------
+  // day.training = { plan: "A" | "B", sets: { exerciseId: number[] }, levels: { exerciseId: level } }
+  // `levels` records the level each exercise was done at, so progression compares like with like.
+
+  setTrainingPlan(date, plan) {
+    const root = loadRoot();
+    const key = dateKey(date);
+    if (!root.days[key]) root.days[key] = emptyDay(key, root.profile);
+    const t = root.days[key].training || { sets: {}, levels: {} };
+    t.plan = plan;
+    root.days[key].training = t;
+    saveRoot(root);
+  },
+
+  /** Replaces one exercise's sets for the day (empty array clears it). */
+  setTrainingSets(date, plan, exerciseId, sets, level) {
+    const root = loadRoot();
+    const key = dateKey(date);
+    if (!root.days[key]) root.days[key] = emptyDay(key, root.profile);
+    const t = root.days[key].training || { sets: {}, levels: {} };
+    t.plan = t.plan || plan;
+    const clean = sets.map((n) => Math.max(0, Math.round(toNum(n))));
+    while (clean.length && !clean[clean.length - 1]) clean.pop();
+    if (clean.some((n) => n > 0)) {
+      t.sets[exerciseId] = clean;
+      t.levels[exerciseId] = level;
+    } else {
+      delete t.sets[exerciseId];
+      delete t.levels[exerciseId];
+    }
+    root.days[key].training = t;
+    saveRoot(root);
+  },
+
+  /** Most recent session of an exercise strictly before `date`: { date, sets, level } or null. */
+  lastExerciseResult(date, exerciseId) {
+    const before = dateKey(date);
+    const days = loadRoot().days;
+    const keys = Object.keys(days).filter((k) => k < before).sort().reverse();
+    for (const k of keys) {
+      const sets = days[k].training?.sets?.[exerciseId];
+      if (sets && sets.some((n) => n > 0)) {
+        return { date: k, sets, level: Number(days[k].training.levels?.[exerciseId]) || 0 };
+      }
+    }
+    return null;
+  },
+
+  /** Plan of the most recent day before `date` that has any logged sets, or null. */
+  lastTrainingPlan(date) {
+    const before = dateKey(date);
+    const days = loadRoot().days;
+    const keys = Object.keys(days).filter((k) => k < before).sort().reverse();
+    for (const k of keys) {
+      const t = days[k].training;
+      if (t && Object.keys(t.sets || {}).length) return t.plan || null;
+    }
+    return null;
   },
 
   /** Read-only lookup of several days at once — null where none exists (getDay would create them). */
@@ -568,6 +630,11 @@ export const Storage = {
       }
       if (beerMl > 0) {
         items.push(`drinks: light lager beer (${Math.round(beerMl)}ml, ${Math.round(beerTotals(beerMl).kcal)}kcal)`);
+      }
+      const trainingSets = day.training?.sets || {};
+      if (Object.keys(trainingSets).length) {
+        const parts = Object.entries(trainingSets).map(([id, sets]) => `${id} ${sets.join("/")}`);
+        items.push(`home strength training (plan ${day.training.plan || "?"}): ${parts.join("; ")}`);
       }
       out.push({
         date: key,

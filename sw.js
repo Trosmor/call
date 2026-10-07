@@ -4,7 +4,7 @@
 // Network-first serves the freshest files whenever online and only falls back to
 // the cache when the network is unreachable, which is the right trade-off for a
 // personal app that is usually online.
-const CACHE_NAME = "colorize-shell-v17";
+const CACHE_NAME = "colorize-shell-v18";
 const SHELL_FILES = [
   "./",
   "./index.html",
@@ -16,6 +16,7 @@ const SHELL_FILES = [
   "./js/garmin.js",
   "./js/icons.js",
   "./js/expenditure.js",
+  "./js/training.js",
   "./manifest.json"
 ];
 

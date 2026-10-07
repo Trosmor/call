@@ -1085,3 +1085,62 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); -webkit-backdrop-filter: blu
 }
 #create-form .primary-btn.secondary, #create-form .primary-btn.danger { margin-top: 0; }
 .primary-btn.danger { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+
+/* ---------- home training ---------- */
+
+.row-icon.training { background: linear-gradient(135deg, #ffb547, #ff6a3d); }
+.training-card .chip-btn { flex-shrink: 0; }
+.training-body { margin-top: 12px; }
+.training-list { display: flex; flex-direction: column; margin-top: 4px; }
+.ex { padding: 14px 0; border-bottom: 1px solid var(--hairline); }
+.ex:last-child { border-bottom: none; }
+.ex-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.ex-name { font-size: 16px; font-weight: 650; }
+.ex-target { font-family: var(--font-num); font-size: 13px; font-weight: 650; color: var(--text-2); white-space: nowrap; }
+.ex-tip { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.ex-level {
+  margin-top: 8px;
+  max-width: 100%;
+  border: none;
+  background: var(--surface-2);
+  color: var(--text-2);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+.ex-sets { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.ex-sets input {
+  width: 54px;
+  padding: 9px 4px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: center;
+  font-family: var(--font-num);
+  font-weight: 700;
+  outline: none;
+}
+.ex-sets input:focus { border-color: color-mix(in srgb, var(--kcal-b) 60%, transparent); }
+.ex-sets input:not(:placeholder-shown) { background: color-mix(in srgb, var(--good) 16%, var(--surface-2)); }
+.ex-sets input::placeholder { color: var(--text-3); font-weight: 500; }
+.ex-unit { font-size: 12px; color: var(--text-3); }
+.ex-hint { font-size: 12px; line-height: 1.5; color: var(--text-2); margin-top: 8px; }
+.ex-level-up {
+  border: none;
+  background: none;
+  color: var(--kcal-b);
+  font-weight: 650;
+  font-size: 12px;
+  padding: 0;
+}
+.training-voice { display: flex; gap: 8px; margin-top: 12px; }
+.training-voice input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: var(--surface-2);
+  border-radius: 20px;
+  padding: 10px 14px;
+  color: var(--text);
+  outline: none;
+}

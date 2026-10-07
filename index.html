@@ -160,6 +160,29 @@
           <div id="garmin-stats" class="stats-grid four"></div>
         </section>
 
+        <section id="training-card" class="card training-card">
+          <div class="row-card">
+            <div class="row-icon training" data-icon="dumbbell"></div>
+            <div class="row-text">
+              <div class="row-title">Тренировка дня</div>
+              <div id="training-sub" class="row-sub"></div>
+            </div>
+            <button id="btn-training-toggle" class="chip-btn">Начать</button>
+          </div>
+          <div id="training-body" class="training-body hidden">
+            <div class="segmented-control two" role="radiogroup" aria-label="План">
+              <label><input type="radio" name="training-plan" value="A" /><span>А · Ноги и грудь</span></label>
+              <label><input type="radio" name="training-plan" value="B" /><span>Б · Спина и корпус</span></label>
+            </div>
+            <div id="training-list" class="training-list"></div>
+            <form id="training-voice-form" class="training-voice">
+              <input id="training-voice-input" type="text" placeholder="«подтягивания 4, 4, 3, тяга 3 по 15»" autocomplete="off" enterkeyhint="send" />
+              <button type="submit" id="training-voice-btn" class="round-btn accent" aria-label="Записать" data-icon="send"></button>
+            </form>
+            <p class="hint">Вводи повторы в клетки или надиктуй одной фразой (🎤 на клавиатуре). Подход заканчивай за 1–2 повтора до отказа.</p>
+          </div>
+        </section>
+
         <section class="card">
           <div class="row-card">
             <div class="row-icon workouts" data-icon="activity"></div>

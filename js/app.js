@@ -4,9 +4,10 @@ import { computeGoals, bmr, dailyGoalAdjustment, macrosForCalories, ACTIVITY_LAB
 import { estimateExpenditure, garminShare, weightTrend, THRESHOLDS } from "./expenditure.js";
 import { Garmin } from "./garmin.js";
 import { icon, hydrateIcons } from "./icons.js";
+import { PLANS, EXERCISES, levelOf, progressionHint, formatSets } from "./training.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-09-26.1";
+const APP_VERSION = "2026-10-08.1";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "sun" },
@@ -50,7 +51,8 @@ const state = {
   activeMealTypeForDialog: "breakfast",
   editingItemId: null, // non-null while create-dialog is repurposed for editing an existing item
   dialogMode: "create", // create | edit | add-from | library-edit — see showFoodDialog
-  portionSource: null, // the My foods / recent product the portion or library sheet is about
+  portionSource: null,
+  trainingOpen: false, // "Тренировка дня" card expanded // the My foods / recent product the portion or library sheet is about
   dialogBase: null, // original grams/kcal/macros snapshot, used to scale macros when grams changes
   ratingInFlight: new Set(), // "YYYY-MM-DD:mealType" keys with a rating request pending
   loggingBusy: false, // a photo/text logging request is in flight
@@ -570,6 +572,7 @@ function renderAll() {
   renderWater(day);
   renderBeer(day, profile);
   renderWorkouts(day);
+  renderTraining(day);
   renderDayMeta(day);
   renderLoggingMealLabel();
 }
@@ -789,6 +792,159 @@ el("btn-delete-library").onclick = () => {
   el("create-dialog").close();
   renderSearchResults(el("search-input").value);
 };
+
+// ---------- home training ----------
+
+/** Plan for the selected day: whatever was started there, else the opposite of the last one. */
+function trainingPlanFor(day) {
+  if (day.training?.plan) return day.training.plan;
+  return Storage.lastTrainingPlan(state.selectedDate) === "A" ? "B" : "A";
+}
+
+/** Level an exercise is shown at: the one it was logged at today, else the profile's current one. */
+function trainingLevelFor(day, exerciseId, profile) {
+  const logged = day.training?.levels?.[exerciseId];
+  return logged !== undefined ? Number(logged) : levelOf(profile.trainingLevels, exerciseId);
+}
+
+function renderTrainingSub(day) {
+  const plan = trainingPlanFor(day);
+  const done = Object.keys(day.training?.sets || {}).filter((id) => PLANS[plan].exercises.includes(id)).length;
+  const isSunday = dateOnly(state.selectedDate).getDay() === 0;
+  el("training-sub").textContent =
+    `${plan === "A" ? "А" : "Б"} · ${PLANS[plan].title} · ${done}/${PLANS[plan].exercises.length}` +
+    (isSunday && !done ? " · воскресенье — можно отдохнуть" : "");
+  el("btn-training-toggle").textContent = state.trainingOpen ? "Свернуть" : done ? "Продолжить" : "Начать";
+}
+
+function renderTraining(day) {
+  const profile = Storage.getProfile();
+  const plan = trainingPlanFor(day);
+  renderTrainingSub(day);
+  el("training-body").classList.toggle("hidden", !state.trainingOpen);
+  if (!state.trainingOpen) return;
+
+  document.querySelector(`input[name="training-plan"][value="${plan}"]`).checked = true;
+  el("training-list").innerHTML = PLANS[plan].exercises
+    .map((id) => {
+      const ex = EXERCISES[id];
+      const level = trainingLevelFor(day, id, profile);
+      const today = day.training?.sets?.[id] || [];
+      const last = Storage.lastExerciseResult(state.selectedDate, id);
+      const hint = progressionHint(id, last, level);
+      const unit = ex.unit === "sec" ? "сек" : ex.perSide ? "на ногу" : "повт";
+      const inputs = Array.from({ length: Math.max(ex.sets, today.length) }, (_, i) => {
+        // Last time's numbers only make sense as a target at the same level.
+        const placeholder = (last && last.level === level ? last.sets[i] : null) ?? ex.lo;
+        return `<input type="number" inputmode="numeric" min="0" data-ex-set="${id}" value="${today[i] || ""}" placeholder="${placeholder}" aria-label="Подход ${i + 1}" />`;
+      }).join("");
+      const lastText = last
+        ? `Прошлый раз (${new Date(`${last.date}T12:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}): ${formatSets(last.sets, id)}` +
+          (last.level !== level ? ` · уровень «${ex.levels[last.level] || "?"}»` : "")
+        : "Первый раз";
+      return `<div class="ex">
+        <div class="ex-top">
+          <div class="ex-name">${ex.name}</div>
+          <div class="ex-target">${ex.sets} × ${ex.lo}–${ex.hi}${ex.unit === "sec" ? " с" : ""}</div>
+        </div>
+        <div class="ex-tip">${ex.tip}</div>
+        <select class="ex-level" data-ex-level="${id}" aria-label="Уровень">
+          ${ex.levels.map((name, i) => `<option value="${i}"${i === level ? " selected" : ""}>Ур. ${i + 1}: ${name}</option>`).join("")}
+        </select>
+        <div class="ex-sets">${inputs}<span class="ex-unit">${unit}</span></div>
+        <div class="ex-hint">${lastText}<br>${hint.text}${
+          hint.canLevelUp ? ` <button class="ex-level-up" data-level-up="${id}">Усложнить →</button>` : ""
+        }</div>
+      </div>`;
+    })
+    .join("");
+
+  // Typing a set saves immediately but doesn't re-render — that would close the keyboard.
+  el("training-list").querySelectorAll("[data-ex-set]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const id = input.dataset.exSet;
+      const values = [...el("training-list").querySelectorAll(`[data-ex-set="${id}"]`)].map((n) => Number(n.value) || 0);
+      const level = trainingLevelFor(Storage.getDay(state.selectedDate), id, Storage.getProfile());
+      Storage.setTrainingSets(state.selectedDate, plan, id, values, level);
+      renderTrainingSub(Storage.getDay(state.selectedDate));
+    });
+  });
+  el("training-list").querySelectorAll("[data-ex-level]").forEach((select) => {
+    select.addEventListener("change", () => setExerciseLevel(select.dataset.exLevel, Number(select.value)));
+  });
+  el("training-list").querySelectorAll("[data-level-up]").forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.dataset.levelUp;
+      setExerciseLevel(id, trainingLevelFor(Storage.getDay(state.selectedDate), id, Storage.getProfile()) + 1);
+    };
+  });
+}
+
+/** Changes an exercise's level for the future; re-tags today's sets if any were logged. */
+function setExerciseLevel(id, level) {
+  const clamped = Math.min(Math.max(level, 0), EXERCISES[id].levels.length - 1);
+  const profile = Storage.getProfile();
+  Storage.saveProfile({ trainingLevels: { ...(profile.trainingLevels || {}), [id]: clamped } });
+  const day = Storage.getDay(state.selectedDate);
+  const sets = day.training?.sets?.[id];
+  if (sets) Storage.setTrainingSets(state.selectedDate, trainingPlanFor(day), id, sets, clamped);
+  renderTraining(Storage.getDay(state.selectedDate));
+}
+
+el("btn-training-toggle").onclick = () => {
+  state.trainingOpen = !state.trainingOpen;
+  renderTraining(Storage.getDay(state.selectedDate));
+};
+
+document.querySelectorAll('input[name="training-plan"]').forEach((radio) => {
+  radio.addEventListener("change", () => {
+    Storage.setTrainingPlan(state.selectedDate, radio.value);
+    renderTraining(Storage.getDay(state.selectedDate));
+  });
+});
+
+// "подтягивания 4, 4, 3, тяга резинки 3 по 15" → sets, via one small model call.
+el("training-voice-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = el("training-voice-input");
+  const text = input.value.trim();
+  if (!text || state.loggingBusy) return;
+  const route = ClaudeClient.routeFor(Storage.getProfile());
+  if (!route.apiKey) {
+    setLoggingFeedback(ClaudeClient.missingKeyMessage(route), "error");
+    return;
+  }
+  const date = new Date(state.selectedDate);
+  const day = Storage.getDay(date);
+  const plan = trainingPlanFor(day);
+  const exercises = Object.entries(EXERCISES).map(([id, ex]) => ({ id, name: ex.name, unit: ex.unit }));
+  setLoggingBusy(true);
+  el("training-voice-btn").disabled = true;
+  try {
+    const { entries, unmatched } = await ClaudeClient.parseWorkout(route, text, exercises);
+    if (!entries.length) {
+      setLoggingFeedback(`Не нашёл упражнений в «${text}»${unmatched ? ` (${unmatched})` : ""}.`, "error");
+      return;
+    }
+    const profile = Storage.getProfile();
+    for (const entry of entries) {
+      const level = trainingLevelFor(Storage.getDay(date), entry.exercise_id, profile);
+      Storage.setTrainingSets(date, plan, entry.exercise_id, entry.sets, level);
+    }
+    input.value = "";
+    setLoggingFeedback(
+      "Записано: " + entries.map((en) => `${EXERCISES[en.exercise_id].name} ${formatSets(en.sets, en.exercise_id)}`).join("; ") +
+        (unmatched ? ` · не понял: ${unmatched}` : "") + ` · ${route.name}`,
+      "success"
+    );
+    renderTraining(Storage.getDay(state.selectedDate));
+  } catch (err) {
+    setLoggingFeedback(err instanceof ClaudeAPIError ? err.message : `Ошибка: ${err.message}`, "error");
+  } finally {
+    setLoggingBusy(false);
+    el("training-voice-btn").disabled = false;
+  }
+});
 
 // ---------- repeat yesterday ----------
 
