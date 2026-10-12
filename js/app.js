@@ -7,7 +7,7 @@ import { icon, hydrateIcons } from "./icons.js";
 import { PLANS, EXERCISES, levelOf, progressionHint, formatSets } from "./training.js";
 
 // Bump on every deploy — shown in Settings so it's easy to check which version the phone runs.
-const APP_VERSION = "2026-10-08.1";
+const APP_VERSION = "2026-10-12.1";
 
 const MEAL_META = {
   breakfast: { label: "Breakfast", icon: "sun" },
@@ -1308,7 +1308,24 @@ function applyClaudeResponse(response, ctx) {
   const messages = [];
   const action = source === "photo" ? "add" : response.action; // a photo can only add food
 
-  if (action === "edit" || action === "delete") {
+  if (action === "move") {
+    const match = findLoggedItem(Storage.getDay(date), response.target_name, response.target_meal_type);
+    const toMeal = normalizeMealType(response.meal_type);
+    if (!match) {
+      setLoggingFeedback(`Не нашёл "${response.target_name}" среди залогированного за этот день.`, "error");
+      return;
+    }
+    if (!toMeal) {
+      setLoggingFeedback("Не понял, в какой приём пищи перенести — скажи «в обед», «в ужин»…", "error");
+      return;
+    }
+    if (toMeal === match.mealType) {
+      messages.push(`${match.item.name} уже в ${MEAL_META[toMeal].label}`);
+    } else {
+      Storage.moveFoodItem(date, match.mealType, toMeal, match.item.id);
+      messages.push(`Перенесено: ${match.item.name} → ${MEAL_META[toMeal].label}`);
+    }
+  } else if (action === "edit" || action === "delete") {
     const match = findLoggedItem(Storage.getDay(date), response.target_name, response.target_meal_type);
     if (!match) {
       setLoggingFeedback(`Не нашёл "${response.target_name}" среди залогированного за этот день.`, "error");
@@ -1360,14 +1377,34 @@ function applyClaudeResponse(response, ctx) {
   // Water is independent of the food action, so "съел яблоко и выпил стакан воды" logs both
   // (it used to return early on water and silently drop the food).
   const waterMl = Math.round(num(response.water_ml));
-  if (response.is_water && waterMl > 0) {
+  if (response.is_water && waterMl !== 0) {
     Storage.addWater(date, waterMl);
-    messages.push(`+${waterMl} ml water`);
+    messages.push(`${waterMl > 0 ? "+" : "−"}${Math.abs(waterMl)} ml water`);
+  }
+
+  // Beer goes to its own counter (pale-lager values), never into the meals.
+  const beerMl = Math.round(num(response.beer_ml));
+  if (beerMl !== 0) {
+    Storage.addBeer(date, beerMl);
+    const liters = (Math.abs(beerMl) / 1000).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+    messages.push(`${beerMl > 0 ? "+" : "−"}${liters} л пива (${beerMl > 0 ? "" : "−"}${fmt(Storage.beerTotals(Math.abs(beerMl)).kcal)} kcal)`);
+  }
+
+  // Body weight → Measurements (feeds the real-expenditure estimate). Sanity range guards
+  // against a misheard number ("вес 9 18") silently corrupting the trend.
+  const weightKg = Math.round(num(response.weight_kg) * 10) / 10;
+  if (weightKg) {
+    if (weightKg >= 30 && weightKg <= 300) {
+      Storage.addMeasurement(weightKg, source === "photo" ? "фото весов" : "голос", date);
+      messages.push(`Вес ${weightKg.toFixed(1)} kg записан`);
+    } else {
+      messages.push(`Вес ${weightKg} kg не записан — похоже на ошибку распознавания`);
+    }
   }
 
   if (!messages.length) {
     setLoggingFeedback(
-      source === "photo" ? "Не удалось распознать еду на фото." : "Не нашёл в сообщении еды или воды — опиши подробнее.",
+      source === "photo" ? "Не удалось распознать еду на фото." : "Не нашёл в сообщении еды, напитков или веса — опиши подробнее.",
       "error"
     );
     return;

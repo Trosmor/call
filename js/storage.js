@@ -311,6 +311,19 @@ export const Storage = {
     saveRoot(root);
   },
 
+  /** Moves a logged item to another meal of the same day, keeping its id and values. */
+  moveFoodItem(date, fromMeal, toMeal, itemId) {
+    const root = loadRoot();
+    const day = root.days[dateKey(date)];
+    if (!day || fromMeal === toMeal) return false;
+    const idx = day.meals[fromMeal].findIndex((i) => i.id === itemId);
+    if (idx === -1) return false;
+    const [item] = day.meals[fromMeal].splice(idx, 1);
+    day.meals[toMeal].push(item);
+    saveRoot(root);
+    return true;
+  },
+
   editFoodItem(date, mealType, itemId, updates) {
     const root = loadRoot();
     const key = dateKey(date);

@@ -19,7 +19,7 @@ const SYSTEM_PROMPT = `Ты — модуль распознавания еды �
 Верни СТРОГО валидный JSON без markdown-обёртки, по схеме:
 
 {
-  "action": "add" | "edit" | "delete",
+  "action": "add" | "edit" | "delete" | "move",
   "target_name": "string | null",
   "target_meal_type": "breakfast" | "lunch" | "dinner" | "snack" | null,
   "items": [
@@ -35,6 +35,8 @@ const SYSTEM_PROMPT = `Ты — модуль распознавания еды �
   "meal_type": "breakfast" | "lunch" | "dinner" | "snack" | null,
   "is_water": boolean,
   "water_ml": integer | null,
+  "beer_ml": integer | null,
+  "weight_kg": number | null,
   "confidence_note": "string, краткая заметка о неопределённости оценки, если есть"
 }
 
@@ -42,8 +44,12 @@ const SYSTEM_PROMPT = `Ты — модуль распознавания еды �
 - action="add" (по умолчанию) — пользователь описывает НОВУЮ еду. items — новые продукты. target_name и target_meal_type — null.
 - action="edit" — пользователь просит поправить/обновить уже залогированный продукт ("поменяй йогурт на 250 грамм", "у бутерброда было не 2 яйца а 1"). target_name — точное название существующего продукта из already_logged, максимально похожее на то, что имеет в виду пользователь. target_meal_type — приём пищи, где он находится в already_logged. items — ОДИН элемент с полными новыми значениями (grams/kcal/БЖУ пересчитаны под новую порцию).
 - action="delete" — пользователь просит убрать/удалить уже залогированный продукт ("убери печеньки"). target_name и target_meal_type как для edit. items — пустой массив.
+- action="move" — пользователь просит перенести уже залогированный продукт в другой приём пищи ("перенеси курицу в ужин", "йогурт был на завтрак, а не на обед"). target_name и target_meal_type — как для edit (где продукт лежит сейчас), meal_type — КУДА перенести. items — пустой массив.
 - Если already_logged не передан, пуст, или нет разумного совпадения по названию — считай это action="add".
 - Если пользователь выпил воду/напиток без калорий — заполни is_water=true и water_ml, action="add". Если в том же сообщении есть и еда ("съел яблоко и выпил стакан воды") — ОБЯЗАТЕЛЬНО верни еду в items, воду в water_ml; если еды нет — items пустой массив.
+- Если просит УБРАТЬ воду ("минус стакан воды", "убери 250 мл воды") — is_water=true, water_ml ОТРИЦАТЕЛЬНОЕ (стакан = 250 мл).
+- ПИВО (любое: светлое, тёмное, пшеничное, крафт) НИКОГДА не клади в items — у приложения отдельный счётчик пива. Верни суммарный объём в beer_ml: "2 пива по 0,5" → 1000; "бутылка пива" → 500; "маленькое пиво" / "0,33" → 330; "пинта" → 500. Убрать пиво ("минус одно пиво", "убери пиво 0,5") — beer_ml ОТРИЦАТЕЛЬНОЕ. Другой алкоголь (вино, виски, сидр, коктейли) — это обычные items. Если пива нет — beer_ml null.
+- Если пользователь сообщает свой вес тела ("вес 91,8", "взвесился 92.3", "утром 91 и 6") — верни weight_kg числом в килограммах, action="add", items пустой массив (если только в том же сообщении нет еды). На фото экрана напольных весов — тоже weight_kg. Если веса нет — weight_kg null.
 - Если пользователь явно назвал приём пищи для НОВОЙ еды ("на завтрак", "перекусил") — укажи meal_type. Если не указал — верни null (приложение само решит, куда положить).
 - Если на фото несколько продуктов — верни несколько элементов items (action всегда "add" для фото, already_logged для фото не передаётся).
 - Граммовку и БЖУ оценивай по стандартным справочным значениям на 100г для похожих продуктов, если точный вес не указан — оцени по объёму/визуальному размеру порции.
@@ -104,7 +110,7 @@ const MEAL_TYPE_ENUM = { type: "string", enum: ["breakfast", "lunch", "dinner", 
 const FOOD_SCHEMA = {
   type: "object",
   properties: {
-    action: { type: "string", enum: ["add", "edit", "delete"] },
+    action: { type: "string", enum: ["add", "edit", "delete", "move"] },
     target_name: nullable({ type: "string" }),
     target_meal_type: nullable(MEAL_TYPE_ENUM),
     items: {
@@ -126,9 +132,11 @@ const FOOD_SCHEMA = {
     meal_type: nullable(MEAL_TYPE_ENUM),
     is_water: { type: "boolean" },
     water_ml: nullable({ type: "number" }),
+    beer_ml: nullable({ type: "number" }),
+    weight_kg: nullable({ type: "number" }),
     confidence_note: nullable({ type: "string" })
   },
-  required: ["action", "target_name", "target_meal_type", "items", "meal_type", "is_water", "water_ml", "confidence_note"],
+  required: ["action", "target_name", "target_meal_type", "items", "meal_type", "is_water", "water_ml", "beer_ml", "weight_kg", "confidence_note"],
   additionalProperties: false
 };
 
@@ -419,7 +427,7 @@ export const ClaudeClient = {
   async analyzeFoodPhoto(route, imageBase64, mediaType = "image/jpeg") {
     const { text } = await send(route, SYSTEM_PROMPT, [
       { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
-      { type: "text", text: "Распознай еду на фото и верни JSON по схеме." }
+      { type: "text", text: "Распознай еду и напитки на фото (или показания напольных весов) и верни JSON по схеме." }
     ], "logging", { jsonOutput: true, schema: FOOD_SCHEMA });
     return parseFoodResponse(text, route);
   },
