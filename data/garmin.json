@@ -1,17 +1,17 @@
 {
-  "syncedAt": "2026-10-26T16:32:23.611520+00:00",
+  "syncedAt": "2026-10-26T22:21:07.797617+00:00",
   "days": [
     {
       "date": "2026-10-26",
-      "steps": 626,
-      "activeCalories": 82.0,
-      "totalCalories": 1563.0,
+      "steps": 1595,
+      "activeCalories": 159.0,
+      "totalCalories": 2102.0,
       "restingHeartRate": 65,
       "sleepHours": 6.8,
       "sleepScore": null,
       "hrvLastNightAvg": 25,
       "hrvStatus": "UNBALANCED",
-      "avgStressLevel": 39,
+      "avgStressLevel": 42,
       "bodyBatteryHigh": 35,
       "bodyBatteryLow": 5,
       "weightKg": null,
