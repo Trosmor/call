@@ -1,11 +1,27 @@
 {
-  "syncedAt": "2026-11-04T23:16:17.720974+00:00",
+  "syncedAt": "2026-11-05T05:25:33.996724+00:00",
   "days": [
     {
+      "date": "2026-11-05",
+      "steps": null,
+      "activeCalories": 0.0,
+      "totalCalories": 132.0,
+      "restingHeartRate": 71,
+      "sleepHours": null,
+      "sleepScore": null,
+      "hrvLastNightAvg": null,
+      "hrvStatus": null,
+      "avgStressLevel": 35,
+      "bodyBatteryHigh": 10,
+      "bodyBatteryLow": 5,
+      "weightKg": null,
+      "activities": []
+    },
+    {
       "date": "2026-11-04",
-      "steps": 3061,
-      "activeCalories": 194.0,
-      "totalCalories": 2420.0,
+      "steps": 3107,
+      "activeCalories": 196.0,
+      "totalCalories": 2498.0,
       "restingHeartRate": 66,
       "sleepHours": 7.8,
       "sleepScore": null,
@@ -224,30 +240,6 @@
       "bodyBatteryLow": 5,
       "weightKg": null,
       "activities": []
-    },
-    {
-      "date": "2026-10-22",
-      "steps": 9812,
-      "activeCalories": 1102.0,
-      "totalCalories": 3404.0,
-      "restingHeartRate": 66,
-      "sleepHours": 6.5,
-      "sleepScore": null,
-      "hrvLastNightAvg": 25,
-      "hrvStatus": "BALANCED",
-      "avgStressLevel": 44,
-      "bodyBatteryHigh": 51,
-      "bodyBatteryLow": 5,
-      "weightKg": null,
-      "activities": [
-        {
-          "name": "Alcobaça Велосипед",
-          "type": "cycling",
-          "durationMin": 68.4,
-          "calories": 490.0,
-          "avgHeartRate": 135.0
-        }
-      ]
     }
   ]
 }
