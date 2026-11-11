@@ -1,6 +1,22 @@
 {
-  "syncedAt": "2026-11-10T07:01:38.117611+00:00",
+  "syncedAt": "2026-11-11T04:56:33.101827+00:00",
   "days": [
+    {
+      "date": "2026-11-11",
+      "steps": null,
+      "activeCalories": null,
+      "totalCalories": null,
+      "restingHeartRate": null,
+      "sleepHours": null,
+      "sleepScore": null,
+      "hrvLastNightAvg": null,
+      "hrvStatus": null,
+      "avgStressLevel": null,
+      "bodyBatteryHigh": null,
+      "bodyBatteryLow": null,
+      "weightKg": null,
+      "activities": []
+    },
     {
       "date": "2026-11-10",
       "steps": null,
@@ -208,30 +224,6 @@
       "bodyBatteryLow": 7,
       "weightKg": null,
       "activities": []
-    },
-    {
-      "date": "2026-10-28",
-      "steps": 4886,
-      "activeCalories": 210.0,
-      "totalCalories": 2512.0,
-      "restingHeartRate": 68,
-      "sleepHours": 7.5,
-      "sleepScore": null,
-      "hrvLastNightAvg": 24,
-      "hrvStatus": "UNBALANCED",
-      "avgStressLevel": 35,
-      "bodyBatteryHigh": 29,
-      "bodyBatteryLow": 5,
-      "weightKg": null,
-      "activities": [
-        {
-          "name": "Óbidos Ходьба",
-          "type": "walking",
-          "durationMin": 28.6,
-          "calories": 154.0,
-          "avgHeartRate": 103.0
-        }
-      ]
     }
   ]
 }
